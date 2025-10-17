@@ -24,6 +24,7 @@ namespace RPA_ULTRA_CORE.ViewModels
         private SKPoint _dragOffset;
         private bool _isShiftPressed;
         private bool _needsRedraw = true;
+        private LineSnapResult? _currentSnapPreview;
 
         public ObservableCollection<BaseShape> Shapes { get; }
         public ObservableCollection<Node> AllNodes { get; }
@@ -148,8 +149,23 @@ namespace RPA_ULTRA_CORE.ViewModels
                 case ToolState.DraggingHandle:
                     if (_draggingNode != null)
                     {
-                        var snappedPoint = _snapService.Snap(point, AllNodes.Where(n => n != _draggingNode));
-                        _draggingNode.Set(snappedPoint.X, snappedPoint.Y);
+                        // Marca que o usuário está movendo
+                        _draggingNode.BeginUserMove();
+
+                        // Detecta snap em linha
+                        _currentSnapPreview = _snapService.DetectLineSnap(point, Shapes, SelectedShape);
+
+                        if (_currentSnapPreview != null)
+                        {
+                            _draggingNode.Set(_currentSnapPreview.SnapPoint.X, _currentSnapPreview.SnapPoint.Y);
+                        }
+                        else
+                        {
+                            var snappedPoint = _snapService.Snap(point, AllNodes.Where(n => n != _draggingNode));
+                            _draggingNode.Set(snappedPoint.X, snappedPoint.Y);
+                        }
+
+                        _draggingNode.EndUserMove();
                         RequestRedraw();
                     }
                     break;
@@ -204,9 +220,23 @@ namespace RPA_ULTRA_CORE.ViewModels
                     break;
 
                 case ToolState.DraggingHandle:
-                    // Tenta conectar com outros nodes ao soltar
-                    if (_draggingNode != null)
+                    // Tenta conectar com linha ou node ao soltar
+                    if (_draggingNode != null && _currentSnapPreview != null)
                     {
+                        if (_currentSnapPreview.IsEndpoint && _currentSnapPreview.EndpointNode != null)
+                        {
+                            // Conecta no endpoint existente
+                            _draggingNode.AttachToEndpoint(_currentSnapPreview.EndpointNode);
+                        }
+                        else if (!_currentSnapPreview.IsEndpoint && _currentSnapPreview.TargetLine != null)
+                        {
+                            // Conecta no meio da linha (mid-span)
+                            _draggingNode.AttachTo(_currentSnapPreview.TargetLine, _currentSnapPreview.T);
+                        }
+                    }
+                    else if (_draggingNode != null)
+                    {
+                        // Tenta snap tradicional em nodes
                         var snappedNode = _snapService.SnapToNode(
                             new SKPoint((float)_draggingNode.X, (float)_draggingNode.Y),
                             AllNodes.Where(n => n != _draggingNode));
@@ -218,6 +248,7 @@ namespace RPA_ULTRA_CORE.ViewModels
                         }
                     }
                     _draggingNode = null;
+                    _currentSnapPreview = null;
                     break;
             }
 
@@ -307,6 +338,47 @@ namespace RPA_ULTRA_CORE.ViewModels
                     (float)_tempStartNode.X, (float)_tempStartNode.Y,
                     _dragStartPoint.X, _dragStartPoint.Y,
                     previewPaint);
+            }
+
+            // Desenha indicador de snap mid-span
+            if (_currentSnapPreview != null && !_currentSnapPreview.IsEndpoint)
+            {
+                using var snapPaint = new SKPaint
+                {
+                    Color = SKColors.Yellow,
+                    StrokeWidth = 2f * dpiScale,
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Fill
+                };
+
+                using var outlinePaint = new SKPaint
+                {
+                    Color = SKColors.Black,
+                    StrokeWidth = 1f * dpiScale,
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Stroke
+                };
+
+                // Desenha um círculo indicando o ponto de snap
+                canvas.DrawCircle(_currentSnapPreview.SnapPoint, 8f * dpiScale, snapPaint);
+                canvas.DrawCircle(_currentSnapPreview.SnapPoint, 8f * dpiScale, outlinePaint);
+
+                // Desenha linha conectora fantasma
+                if (_draggingNode != null)
+                {
+                    using var linePaint = new SKPaint
+                    {
+                        Color = SKColors.Yellow.WithAlpha(128),
+                        StrokeWidth = 1.5f * dpiScale,
+                        PathEffect = SKPathEffect.CreateDash(new[] { 3f, 3f }, 0),
+                        IsAntialias = true
+                    };
+
+                    canvas.DrawLine(
+                        (float)_draggingNode.X, (float)_draggingNode.Y,
+                        _currentSnapPreview.SnapPoint.X, _currentSnapPreview.SnapPoint.Y,
+                        linePaint);
+                }
             }
         }
 

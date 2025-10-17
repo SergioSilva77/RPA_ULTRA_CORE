@@ -1,11 +1,25 @@
 using SkiaSharp;
 using RPA_ULTRA_CORE.Models.Geometry;
 using RPA_ULTRA_CORE.Utils;
+using System.Collections.Generic;
 
 namespace RPA_ULTRA_CORE.Services
 {
     /// <summary>
-    /// Serviço para snap-to-grid e snap-to-endpoint
+    /// Resultado de snap para linha
+    /// </summary>
+    public class LineSnapResult
+    {
+        public bool CanSnap { get; set; }
+        public LineShape? TargetLine { get; set; }
+        public double T { get; set; }
+        public bool IsEndpoint { get; set; }
+        public Node? EndpointNode { get; set; }
+        public SKPoint SnapPoint { get; set; }
+    }
+
+    /// <summary>
+    /// Serviço para snap-to-grid, snap-to-endpoint e snap-to-line (mid-span)
     /// </summary>
     public class SnapService
     {
@@ -16,6 +30,7 @@ namespace RPA_ULTRA_CORE.Services
         public float SnapTolerance { get; set; } = DefaultSnapTolerance;
         public bool EnableGridSnap { get; set; } = true;
         public bool EnableEndpointSnap { get; set; } = true;
+        public bool EnableLineSnap { get; set; } = true;
 
         /// <summary>
         /// Aplica snap em um ponto
@@ -113,6 +128,48 @@ namespace RPA_ULTRA_CORE.Services
             }
 
             return false;
+        }
+
+        /// <summary>
+        /// Detecta snap em linha (mid-span ou endpoint)
+        /// </summary>
+        public LineSnapResult? DetectLineSnap(SKPoint point, IEnumerable<BaseShape> shapes, BaseShape? excludeShape = null)
+        {
+            if (!EnableLineSnap)
+                return null;
+
+            LineSnapResult? bestSnap = null;
+            float minDistance = float.MaxValue;
+
+            foreach (var shape in shapes)
+            {
+                if (shape == excludeShape || shape is not LineShape line)
+                    continue;
+
+                var (canConnect, t, isEndpoint) = line.CheckConnectionPoint(point, SnapTolerance);
+
+                if (canConnect)
+                {
+                    var snapPoint = line.GetPointAtParameter(t);
+                    var distance = Math2D.Distance(point, snapPoint);
+
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        bestSnap = new LineSnapResult
+                        {
+                            CanSnap = true,
+                            TargetLine = line,
+                            T = t,
+                            IsEndpoint = isEndpoint,
+                            EndpointNode = isEndpoint ? (t < 0.5 ? line.Start : line.End) : null,
+                            SnapPoint = snapPoint
+                        };
+                    }
+                }
+            }
+
+            return bestSnap;
         }
     }
 }

@@ -106,6 +106,64 @@ namespace RPA_ULTRA_CORE.Models.Geometry
             return null;
         }
 
+        /// <summary>
+        /// Calcula o parâmetro T [0,1] para o ponto mais próximo na linha
+        /// </summary>
+        public double GetParametricPosition(SKPoint point)
+        {
+            var a = new SKPoint((float)Start.X, (float)Start.Y);
+            var b = new SKPoint((float)End.X, (float)End.Y);
+
+            float dx = b.X - a.X;
+            float dy = b.Y - a.Y;
+            float lengthSq = dx * dx + dy * dy;
+
+            if (lengthSq < 0.001f)
+                return 0; // Linha é praticamente um ponto
+
+            // Projeção do ponto na linha
+            float t = ((point.X - a.X) * dx + (point.Y - a.Y) * dy) / lengthSq;
+
+            // Clamp entre 0 e 1
+            return Math.Clamp(t, 0, 1);
+        }
+
+        /// <summary>
+        /// Obtém o ponto na linha para um dado T [0,1]
+        /// </summary>
+        public SKPoint GetPointAtParameter(double t)
+        {
+            t = Math.Clamp(t, 0, 1);
+            var a = new SKPoint((float)Start.X, (float)Start.Y);
+            var b = new SKPoint((float)End.X, (float)End.Y);
+
+            return new SKPoint(
+                a.X + (float)(t * (b.X - a.X)),
+                a.Y + (float)(t * (b.Y - a.Y))
+            );
+        }
+
+        /// <summary>
+        /// Verifica se um ponto deve conectar em endpoint ou mid-span
+        /// </summary>
+        public (bool canConnect, double t, bool isEndpoint) CheckConnectionPoint(SKPoint point, float tolerance)
+        {
+            float distance = Math2D.DistancePointToSegment(
+                point,
+                new SKPoint((float)Start.X, (float)Start.Y),
+                new SKPoint((float)End.X, (float)End.Y));
+
+            if (distance > tolerance)
+                return (false, 0, false);
+
+            double t = GetParametricPosition(point);
+
+            // Se muito próximo dos endpoints (2% da linha), conecta no endpoint
+            bool isEndpoint = t <= 0.02 || t >= 0.98;
+
+            return (true, t, isEndpoint);
+        }
+
         public override void Move(double dx, double dy)
         {
             // Move ambos os Nodes, propagando para outras linhas conectadas

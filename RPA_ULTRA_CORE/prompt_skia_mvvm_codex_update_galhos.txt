@@ -1,0 +1,134 @@
+>> EXTENSÃO DO PROMPT ANTERIOR — **NÃO MODIFIQUE O .gitignore**. Aplique **exatamente em cima** do projeto já gerado.
+
+========================================
+NOVAS REGRAS — "GALHOS NO TRONCO"
+========================================
+Agora **linhas podem se conectar em QUALQUER ponto** ao longo de outra linha (não só nos endpoints). Pense como **galhos conectados ao tronco**:
+- Tenho uma **linha pai** (tronco) e várias **linhas filhas** (galhos) interconectadas em qualquer ponto do segmento da linha pai (meio, 1/3, 3/4 etc.).
+- **Ao mover ou redimensionar a linha pai**, **todas as linhas filhas** conectadas **se movem de forma uniforme e proporcional** ao ponto onde estão encaixadas no pai.
+- **Se uma linha filha for movida** e sua conexão **NÃO** estiver nos **endpoints** (início/fim) da linha pai (ou seja, é conexão no meio do segmento), então **ela é desencaixada** do pai (a conexão é removida).
+- **Se a filha estiver conectada exatamente no endpoint** (start ou end) da linha pai e eu **mover a filha**, **a linha pai será movida JUNTAMENTE**, porém **apenas aquele endpoint/trecho conectado** deve se ajustar (isto é, mova o **endpoint correspondente** da linha pai). Os outros "galhos" continuam seguindo proporcionalmente ao seu ponto, como num tronco com vários galhos.
+- Ao mover a **linha pai inteira** (translação) ou ao **redimensionar/rotacionar** (arrastando seus endpoints), as posições das conexões **paramétricas** (no meio) devem ser recalculadas **por interpolação** entre `Start` e `End` do pai, preservando o **fator proporcional**.
+
+========================================
+IMPLEMENTAÇÃO — ÂNCORAS PARAMÉTRICAS
+========================================
+Amplie o desenho arquitetural anterior mantendo MVVM/Observer/SOLID/Clean Code. Não refatore massivamente: **evolua** as peças.
+
+1) **Anchors/Bindings para mid-span**
+   - Mantenha `Node` como “ponto no mundo”, mas permita que um `Node` possa estar **livre** ou **anexado** a um **ponto paramétrico** de uma `LineShape`.
+   - Introduza um *binding* paramétrico: o `Node` pode fazer `AttachTo(lineParent, t)` onde `t ∈ [0,1]` representa a posição fracionária ao longo do segmento do pai.
+   - Enquanto anexado, o `Node` **observa** a `LineShape` pai (eventos de mudança de `Start`/`End`) e atualiza sua posição chamando `Set(Lerp(start,end,t))`. Emita `PositionChanged` normalmente para atualizar linhas filhas.
+   - Forneça `Detach()` para voltar o `Node` a ser **livre**.
+
+2) **Determinando a conexão**
+   - Ao soltar um handle/endpoint de uma linha **perto do corpo** de outra linha:
+     - Projete o ponto na linha alvo → obtenha `t` (clamp [0,1]) e a distância.
+     - Se a distância ≤ tolerância (ex.: 6 px):
+       - Se `t` está **próximo dos endpoints** (ex.: `t ≤ 0.02` ou `t ≥ 0.98`), **conecte ao endpoint real** (use o `Node` do endpoint do pai).
+       - Caso contrário, faça **AttachTo(pai, t)** (conexão no **meio do segmento**).
+     - Se a distância > tolerância, mantenha livre (padrão).
+   - Ainda respeite **Snap-to-grid** (8 px) e **Snap-to-endpoints** como antes.
+
+3) **Movimentações & regras**
+   - **Mover PAI** (arrastando corpo): translada ambos endpoints do pai. Todo `Node` anexado por `AttachTo(pai, t)` **acompanha** via Observer (lerp do novo segmento). As filhas conectadas a esses `Node`s movem-se automaticamente.
+   - **Redimensionar PAI** (arrastando endpoint): altera `Start` ou `End`; anchors paramétricos recalculam via `t`. Efeito: filhos continuam **proporcionais** ao ponto de conexão.
+   - **Mover FILHA conectada ao MEIO**: se o usuário mover a filha (arrastando corpo ou handle do lado conectado), **desanexe** o `Node` conectado (chame `Detach()` imediatamente) e então processe o movimento normalmente (sem arrastar o pai).
+   - **Mover FILHA conectada ao ENDPOINT do PAI**: se o usuário mover o handle **conectado**, **propague** a alteração para o **endpoint do pai** correspondente (mova o `Node` do pai). Resultado: o pai “cede” naquele endpoint, e os demais galhos (mid-span) acompanham uniformemente.
+   - **Excluir PAI**: desanexar todos os `Node`s filhos (ou, opcionalmente, excluir as filhas se houver regra de negócio).
+   - **Excluir FILHA**: se tiver `Node` conectado por `AttachTo`, apenas `Detach()` e remova a filha.
+
+4) **Assinaturas sugeridas (evolução mínima)**
+```csharp
+public sealed class Node
+{
+    public Guid Id { get; } = Guid.NewGuid();
+    public double X { get; private set; }
+    public double Y { get; private set; }
+    public event EventHandler? PositionChanged;
+
+    private SegmentAttachment? _attachment; // null = livre
+
+    public void Set(double x, double y)
+    {
+        // se livre, mude posição; se anexado e chamado por input do usuário,
+        // decidir se deve Detach() (ver regra).
+        X = x; Y = y; PositionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void AttachTo(LineShape parent, double t)
+    {
+        _attachment = new SegmentAttachment(parent, t, this);
+        _attachment.Bind();
+        // Atualize posição inicial via Lerp
+        var p = _attachment.GetWorld();
+        X = p.X; Y = p.Y; PositionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void AttachToEndpoint(Node endpointNode)
+    {
+        _attachment = new SegmentAttachment(endpointNode); // modo endpoint
+        _attachment.Bind();
+        X = endpointNode.X; Y = endpointNode.Y; PositionChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void Detach()
+    {
+        _attachment?.Unbind();
+        _attachment = null;
+    }
+
+    public bool IsAttachedMidSpan => _attachment?.Mode == AttachmentMode.MidSpan;
+    public bool IsAttachedEndpoint => _attachment?.Mode == AttachmentMode.Endpoint;
+}
+
+public enum AttachmentMode { MidSpan, Endpoint }
+
+public sealed class SegmentAttachment
+{
+    public AttachmentMode Mode { get; }
+    public LineShape? ParentLine { get; }
+    public Node? EndpointNode { get; }
+    public double T { get; private set; } // válido quando MidSpan
+    private readonly Node _owner;
+
+    public SegmentAttachment(LineShape parent, double t, Node owner) { /* MidSpan */ }
+    public SegmentAttachment(Node endpointNode) { /* Endpoint */ }
+
+    public void SetT(double t) { /* clamp + notify */ }
+    public SKPoint GetWorld()
+    {
+        if (Mode == AttachmentMode.Endpoint) return new SKPoint((float)EndpointNode!.X, (float)EndpointNode!.Y);
+        var a = new SKPoint((float)ParentLine!.Start.X, (float)ParentLine!.Start.Y);
+        var b = new SKPoint((float)ParentLine!.End.X,   (float)ParentLine!.End.Y);
+        return new SKPoint(a.X + (b.X - a.X) * (float)T, a.Y + (b.Y - a.Y) * (float)T);
+    }
+
+    public void Bind()   { /* subscribe em eventos de mudança do pai/endpoint -> atualiza _owner.Set(...) */ }
+    public void Unbind() { /* unsubscribe */ }
+}
+```
+
+5) **HitTest/Seleção**
+   - `HitTest` em linha pai continua por **distância ponto→segmento**.
+   - Para “soltar para conectar”, reutilize o mesmo cálculo para obter `t` e a menor distância.
+   - Mostre um **handle fantasma** ao passar o mouse sobre o corpo do pai indicando que pode conectar no meio.
+
+6) **Undo/Redo (se tiver)**
+   - Trate `AttachTo`, `Detach()`, mover endpoint do pai via filha, e redimensionamentos como **comandos** para desfazer/refazer.
+
+========================================
+CRITÉRIOS DE ACEITE (ADICIONAIS)
+========================================
+10) Conexão **mid-span** funcionando: ao soltar um endpoint de filha sobre o **corpo** da linha pai, cria-se o **anexo paramétrico (t)**.
+11) Movendo/esticando a **linha pai**, todas as filhas conectadas **acompanham proporcionalmente** ao seu **t** (uniforme, “galhos no tronco”).
+12) Movendo uma **filha** conectada ao **meio** do pai → **desencaixa** (Detach) e não altera o pai.
+13) Movendo uma **filha** conectada ao **endpoint** do pai → pai **cede** naquele endpoint (mova o `Node` do pai); os demais galhos acompanham.
+14) Persistem as regras anteriores (SHIFT para criar linha, handles, snap, Observer, SOLID, MVVM, XAML mínimo, SkiaSharp 2.88.x).
+
+========================================
+NOTAS
+========================================
+- Preserve versões estáveis (SkiaSharp 2.88.x) e evite APIs novas.
+- Comente de forma objetiva (explicando `AttachTo`, `Detach`, cálculo de `t`, propagação por Observer).
+- **Não** mude `.gitignore`.
