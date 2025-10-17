@@ -1,0 +1,48 @@
+# 04 — Inventário (Estilo Minecraft) — Especificação Detalhada
+
+## Overlay
+- Abre/fecha com **E** (toggle). **ESC** fecha.
+- Pausa edição do canvas enquanto aberto.
+- Permanece aberto após drop (auto-fechar pode ser flag futura).
+
+## Estrutura
+- **Seções (topo)**: somente **ícones** (sem texto).
+- **Grid de slots** (área central): **7 colunas fixas**; **linhas variáveis** (conforme altura e nº de itens).
+- **Pesquisa**: **apenas na seção atual** — filtra por **Name** e **Tags**.
+- **Paginação** (canto superior direito): **“1 de N”** + **setas clicáveis** (sem teclas de navegação, por ora).
+- **Hotbar** (rodapé): **7 slots fixos**, sempre visível.
+
+## Interações
+1) **Hotbar**:
+   - Inventário **aberto**: **1..7** atribui o item **em hover** ao slot correspondente (substitui se já houver).
+   - Inventário **fechado**: **1..7** seleciona a ferramenta ativa (slot).
+   - Permitir **itens duplicados** em slots diferentes.
+2) **Drag-and-drop** para o canvas:
+   - Ghost preview sobre `SKElement` com **snap em tempo real** (grid/endpoints/mid-span).
+   - Soltar:
+     - `ShapeBlueprint` → cria forma com **tamanho padrão** configurável.
+     - `StepImage` → cria nó com ícone (centro) com **tamanho padrão**.
+     - `Action` → ação imediata (se existir); caso contrário, ignorar drop.
+3) **Seções**:
+   - Clique no ícone muda de seção, reseta página para **1** e limpa pesquisa.
+4) **Pesquisa**:
+   - Atualiza em tempo real (throttle ~150–300ms).
+   - Filtro aplica na lista da seção atual; paginação reflete a lista **filtrada**.
+
+## Dados
+- **Section**: `{ Id, IconResource, Items[] }`
+- **Item**: `{ Id, Name, Type(ShapeBlueprint|StepImage|Action), Tags[], IconResource, Defaults?, Action? }`
+- **PageSize** = `Columns(7) * Rows(calculado)`; **TotalPages** = `ceil(Filtered / PageSize)`.
+
+## UI/Estilo
+- Slots: estados **normal/hover/selecionado**.
+- **Tooltips**: **bg preto**, **fg branco**. Linha 1: **Nome**; seguintes: descrição com **quebras `\n`**, máx **3 linhas**.
+- Ícones por **embedded resource** (override opcional via config). **Não** exibir paths.
+
+## Conexões (relembre)
+- Linhas → **formas**: ponto **mais próximo do perímetro**.
+- Linhas → **StepImage**: **centro**.
+- Linhas ↔ linhas: **mid-span** com `t`, obedecendo regras de movimento/desanexar/endpoint.
+
+## Performance
+- Cache de `SKImage` (ícones). Sem necessidade de virtualização pesada (centenas, no máx ~mil).

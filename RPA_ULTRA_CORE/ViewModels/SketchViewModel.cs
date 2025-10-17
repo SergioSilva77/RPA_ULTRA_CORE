@@ -5,6 +5,9 @@ using RPA_ULTRA_CORE.Models.Geometry;
 using RPA_ULTRA_CORE.Services;
 using RPA_ULTRA_CORE.Utils;
 using RPA_ULTRA_CORE.Helpers;
+using RPA_ULTRA_CORE.Inventory.UI;
+using RPA_ULTRA_CORE.Inventory.Services;
+using RPA_ULTRA_CORE.Plugins.Abstractions;
 
 namespace RPA_ULTRA_CORE.ViewModels
 {
@@ -15,6 +18,8 @@ namespace RPA_ULTRA_CORE.ViewModels
     {
         private readonly SnapService _snapService;
         private readonly EventBus _eventBus;
+        private readonly IInventoryService _inventoryService;
+        private readonly InventoryView _inventoryView;
 
         private ToolState _currentToolState = ToolState.Idle;
         private BaseShape? _selectedShape;
@@ -25,6 +30,11 @@ namespace RPA_ULTRA_CORE.ViewModels
         private bool _isShiftPressed;
         private bool _needsRedraw = true;
         private LineSnapResult? _currentSnapPreview;
+        private ShapeSnapResult? _currentShapeSnapPreview;
+        private SKPoint _currentMousePosition;
+        private bool _isPreviewingLine;
+        private int _selectedHotbarSlot = -1;
+        private SKSize _canvasSize;
 
         public ObservableCollection<BaseShape> Shapes { get; }
         public ObservableCollection<Node> AllNodes { get; }
@@ -69,6 +79,12 @@ namespace RPA_ULTRA_CORE.ViewModels
             Shapes = new ObservableCollection<BaseShape>();
             AllNodes = new ObservableCollection<Node>();
 
+            // Initialize inventory
+            _inventoryService = new InventoryService();
+            _inventoryView = new InventoryView(_inventoryService);
+            _inventoryView.ItemDropped += OnInventoryItemDropped;
+            _inventoryView.InventoryClosed += OnInventoryClosed;
+
             DeleteSelectionCommand = new RelayCommand(ExecuteDeleteSelection);
             ClearCanvasCommand = new RelayCommand(ExecuteClearCanvas);
 
@@ -81,6 +97,14 @@ namespace RPA_ULTRA_CORE.ViewModels
         /// </summary>
         public void OnMouseDown(SKPoint point)
         {
+            // Se inventário visível, delega para ele
+            if (_inventoryView.IsVisible)
+            {
+                _inventoryView.OnMouseDown(point, MouseButton.Left);
+                RequestRedraw();
+                return;
+            }
+
             _dragStartPoint = point;
             point = _snapService.Snap(point, AllNodes);
 
@@ -139,10 +163,38 @@ namespace RPA_ULTRA_CORE.ViewModels
         /// </summary>
         public void OnMouseMove(SKPoint point)
         {
+            _currentMousePosition = point;
+
+            // Se inventário visível, delega para ele
+            if (_inventoryView.IsVisible)
+            {
+                _inventoryView.OnMouseMove(point);
+                RequestRedraw();
+                return;
+            }
+
+            // Se SHIFT pressionado e não está desenhando, mostra preview
+            if (IsShiftPressed && CurrentToolState == ToolState.Idle)
+            {
+                _isPreviewingLine = true;
+                RequestRedraw();
+            }
+
             switch (CurrentToolState)
             {
                 case ToolState.DrawingLine:
-                    // Atualiza preview da linha
+                    // Detecta snap em shape primeiro
+                    _currentShapeSnapPreview = _snapService.DetectShapeSnap(point, Shapes);
+
+                    if (_currentShapeSnapPreview?.CanSnap == true)
+                    {
+                        _currentMousePosition = _currentShapeSnapPreview.SnapPoint;
+                    }
+                    else
+                    {
+                        // Fallback para snap tradicional
+                        _currentMousePosition = _snapService.Snap(point, AllNodes);
+                    }
                     RequestRedraw();
                     break;
 
@@ -152,17 +204,27 @@ namespace RPA_ULTRA_CORE.ViewModels
                         // Marca que o usuário está movendo
                         _draggingNode.BeginUserMove();
 
-                        // Detecta snap em linha
-                        _currentSnapPreview = _snapService.DetectLineSnap(point, Shapes, SelectedShape);
+                        // Detecta snap em shape primeiro
+                        _currentShapeSnapPreview = _snapService.DetectShapeSnap(point, Shapes, SelectedShape);
 
-                        if (_currentSnapPreview != null)
+                        if (_currentShapeSnapPreview?.CanSnap == true)
                         {
-                            _draggingNode.Set(_currentSnapPreview.SnapPoint.X, _currentSnapPreview.SnapPoint.Y);
+                            _draggingNode.Set(_currentShapeSnapPreview.SnapPoint.X, _currentShapeSnapPreview.SnapPoint.Y);
                         }
                         else
                         {
-                            var snappedPoint = _snapService.Snap(point, AllNodes.Where(n => n != _draggingNode));
-                            _draggingNode.Set(snappedPoint.X, snappedPoint.Y);
+                            // Detecta snap em linha
+                            _currentSnapPreview = _snapService.DetectLineSnap(point, Shapes, SelectedShape);
+
+                            if (_currentSnapPreview != null)
+                            {
+                                _draggingNode.Set(_currentSnapPreview.SnapPoint.X, _currentSnapPreview.SnapPoint.Y);
+                            }
+                            else
+                            {
+                                var snappedPoint = _snapService.Snap(point, AllNodes.Where(n => n != _draggingNode));
+                                _draggingNode.Set(snappedPoint.X, snappedPoint.Y);
+                            }
                         }
 
                         _draggingNode.EndUserMove();
@@ -194,6 +256,14 @@ namespace RPA_ULTRA_CORE.ViewModels
         /// </summary>
         public void OnMouseUp(SKPoint point)
         {
+            // Se inventário visível, delega para ele
+            if (_inventoryView.IsVisible)
+            {
+                _inventoryView.OnMouseUp(point);
+                RequestRedraw();
+                return;
+            }
+
             point = _snapService.Snap(point, AllNodes);
 
             switch (CurrentToolState)
@@ -220,35 +290,46 @@ namespace RPA_ULTRA_CORE.ViewModels
                     break;
 
                 case ToolState.DraggingHandle:
-                    // Tenta conectar com linha ou node ao soltar
-                    if (_draggingNode != null && _currentSnapPreview != null)
+                    // Tenta conectar com shape, linha ou node ao soltar
+                    if (_draggingNode != null)
                     {
-                        if (_currentSnapPreview.IsEndpoint && _currentSnapPreview.EndpointNode != null)
+                        if (_currentShapeSnapPreview?.CanSnap == true &&
+                            _currentShapeSnapPreview.TargetShape != null &&
+                            _currentShapeSnapPreview.Anchor != null)
                         {
-                            // Conecta no endpoint existente
-                            _draggingNode.AttachToEndpoint(_currentSnapPreview.EndpointNode);
+                            // Conecta ao shape (perímetro ou centro)
+                            _draggingNode.AttachToShape(_currentShapeSnapPreview.TargetShape, _currentShapeSnapPreview.Anchor);
                         }
-                        else if (!_currentSnapPreview.IsEndpoint && _currentSnapPreview.TargetLine != null)
+                        else if (_currentSnapPreview != null)
                         {
-                            // Conecta no meio da linha (mid-span)
-                            _draggingNode.AttachTo(_currentSnapPreview.TargetLine, _currentSnapPreview.T);
+                            if (_currentSnapPreview.IsEndpoint && _currentSnapPreview.EndpointNode != null)
+                            {
+                                // Conecta no endpoint existente
+                                _draggingNode.AttachToEndpoint(_currentSnapPreview.EndpointNode);
+                            }
+                            else if (!_currentSnapPreview.IsEndpoint && _currentSnapPreview.TargetLine != null)
+                            {
+                                // Conecta no meio da linha (mid-span)
+                                _draggingNode.AttachTo(_currentSnapPreview.TargetLine, _currentSnapPreview.T);
+                            }
                         }
-                    }
-                    else if (_draggingNode != null)
-                    {
-                        // Tenta snap tradicional em nodes
-                        var snappedNode = _snapService.SnapToNode(
-                            new SKPoint((float)_draggingNode.X, (float)_draggingNode.Y),
-                            AllNodes.Where(n => n != _draggingNode));
+                        else
+                        {
+                            // Tenta snap tradicional em nodes
+                            var snappedNode = _snapService.SnapToNode(
+                                new SKPoint((float)_draggingNode.X, (float)_draggingNode.Y),
+                                AllNodes.Where(n => n != _draggingNode));
 
-                        if (snappedNode != null)
-                        {
-                            // Merge nodes - conecta linhas ao mesmo ponto
-                            MergeNodes(_draggingNode, snappedNode);
+                            if (snappedNode != null)
+                            {
+                                // Merge nodes - conecta linhas ao mesmo ponto
+                                MergeNodes(_draggingNode, snappedNode);
+                            }
                         }
                     }
                     _draggingNode = null;
                     _currentSnapPreview = null;
+                    _currentShapeSnapPreview = null;
                     break;
             }
 
@@ -263,14 +344,54 @@ namespace RPA_ULTRA_CORE.ViewModels
         /// </summary>
         public void OnKeyDown(Key key)
         {
+            // Se inventário visível, delega para ele primeiro
+            if (_inventoryView.IsVisible)
+            {
+                if (_inventoryView.OnKeyDown(key))
+                {
+                    RequestRedraw();
+                    return;
+                }
+            }
+
             switch (key)
             {
+                case Key.E:
+                    // Toggle inventário
+                    _inventoryView.IsVisible = !_inventoryView.IsVisible;
+                    if (_inventoryView.IsVisible)
+                    {
+                        _inventoryView.UpdateLayout(_canvasSize);
+                        // Pausa edição do canvas
+                        CurrentToolState = ToolState.Idle;
+                        _isPreviewingLine = false;
+                    }
+                    RequestRedraw();
+                    break;
+
                 case Key.LeftShift:
                 case Key.RightShift:
                     IsShiftPressed = true;
-                    if (CurrentToolState == ToolState.Idle)
+                    if (CurrentToolState == ToolState.Idle && !_inventoryView.IsVisible)
                     {
-                        // Pronto para desenhar linha
+                        // Ativa preview de linha
+                        _isPreviewingLine = true;
+                        RequestRedraw();
+                    }
+                    break;
+
+                case Key.D1:
+                case Key.D2:
+                case Key.D3:
+                case Key.D4:
+                case Key.D5:
+                case Key.D6:
+                case Key.D7:
+                    // Teclas de hotbar (quando inventário fechado)
+                    if (!_inventoryView.IsVisible)
+                    {
+                        int slotIndex = (int)key - (int)Key.D1;
+                        SelectHotbarSlot(slotIndex);
                     }
                     break;
 
@@ -279,9 +400,16 @@ namespace RPA_ULTRA_CORE.ViewModels
                     break;
 
                 case Key.Escape:
-                    CurrentToolState = ToolState.Idle;
-                    _tempStartNode = null;
-                    _draggingNode = null;
+                    if (_inventoryView.IsVisible)
+                    {
+                        _inventoryView.IsVisible = false;
+                    }
+                    else
+                    {
+                        CurrentToolState = ToolState.Idle;
+                        _tempStartNode = null;
+                        _draggingNode = null;
+                    }
                     RequestRedraw();
                     break;
             }
@@ -297,12 +425,13 @@ namespace RPA_ULTRA_CORE.ViewModels
                 case Key.LeftShift:
                 case Key.RightShift:
                     IsShiftPressed = false;
+                    _isPreviewingLine = false;
                     if (CurrentToolState == ToolState.DrawingLine)
                     {
                         CurrentToolState = ToolState.Idle;
                         _tempStartNode = null;
-                        RequestRedraw();
                     }
+                    RequestRedraw();
                     break;
             }
         }
@@ -312,6 +441,9 @@ namespace RPA_ULTRA_CORE.ViewModels
         /// </summary>
         public void Draw(SKCanvas canvas, float dpiScale)
         {
+            // Atualiza tamanho do canvas
+            _canvasSize = new SKSize(canvas.LocalClipBounds.Width, canvas.LocalClipBounds.Height);
+
             canvas.Clear(SKColors.Black);
 
             // Desenha grid
@@ -326,18 +458,20 @@ namespace RPA_ULTRA_CORE.ViewModels
             // Desenha preview de linha sendo criada
             if (CurrentToolState == ToolState.DrawingLine && _tempStartNode != null)
             {
-                using var previewPaint = new SKPaint
-                {
-                    Color = SKColors.Gray,
-                    StrokeWidth = 2f * dpiScale,
-                    PathEffect = SKPathEffect.CreateDash(new[] { 5f, 5f }, 0),
-                    IsAntialias = true
-                };
+                DrawLinePreview(canvas, dpiScale,
+                    new SKPoint((float)_tempStartNode.X, (float)_tempStartNode.Y),
+                    _currentMousePosition,
+                    false);
+            }
 
-                canvas.DrawLine(
-                    (float)_tempStartNode.X, (float)_tempStartNode.Y,
-                    _dragStartPoint.X, _dragStartPoint.Y,
-                    previewPaint);
+            // Desenha preview contínua com SHIFT pressionado (antes de começar a desenhar)
+            if (_isPreviewingLine && CurrentToolState == ToolState.Idle && IsShiftPressed)
+            {
+                var snappedPoint = _snapService.Snap(_currentMousePosition, AllNodes);
+                DrawLinePreview(canvas, dpiScale,
+                    _currentMousePosition,
+                    snappedPoint,
+                    true);
             }
 
             // Desenha indicador de snap mid-span
@@ -379,6 +513,128 @@ namespace RPA_ULTRA_CORE.ViewModels
                         _currentSnapPreview.SnapPoint.X, _currentSnapPreview.SnapPoint.Y,
                         linePaint);
                 }
+            }
+
+            // Desenha indicador de snap em shape
+            if (_currentShapeSnapPreview?.CanSnap == true)
+            {
+                using var snapPaint = new SKPaint
+                {
+                    Color = SKColors.Cyan,
+                    StrokeWidth = 2f * dpiScale,
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Fill
+                };
+
+                using var outlinePaint = new SKPaint
+                {
+                    Color = SKColors.Black,
+                    StrokeWidth = 1f * dpiScale,
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Stroke
+                };
+
+                // Desenha um círculo indicando o ponto de snap no shape
+                canvas.DrawCircle(_currentShapeSnapPreview.SnapPoint, 10f * dpiScale, snapPaint);
+                canvas.DrawCircle(_currentShapeSnapPreview.SnapPoint, 10f * dpiScale, outlinePaint);
+
+                // Indicador adicional para tipo de âncora
+                var anchor = _currentShapeSnapPreview.Anchor;
+                if (anchor != null)
+                {
+                    using var textPaint = new SKPaint
+                    {
+                        Color = SKColors.White,
+                        TextSize = 10f * dpiScale,
+                        IsAntialias = true
+                    };
+
+                    string anchorText = anchor.Kind switch
+                    {
+                        AnchorKind.Center => "C",
+                        AnchorKind.Corner => "◆",
+                        AnchorKind.EdgeMid => "│",
+                        AnchorKind.Perimeter => "●",
+                        _ => ""
+                    };
+
+                    if (!string.IsNullOrEmpty(anchorText))
+                    {
+                        canvas.DrawText(anchorText,
+                            _currentShapeSnapPreview.SnapPoint.X - 4f * dpiScale,
+                            _currentShapeSnapPreview.SnapPoint.Y + 3f * dpiScale,
+                            textPaint);
+                    }
+                }
+
+                // Desenha linha conectora fantasma
+                if (_draggingNode != null)
+                {
+                    using var linePaint = new SKPaint
+                    {
+                        Color = SKColors.Cyan.WithAlpha(128),
+                        StrokeWidth = 1.5f * dpiScale,
+                        PathEffect = SKPathEffect.CreateDash(new[] { 3f, 3f }, 0),
+                        IsAntialias = true
+                    };
+
+                    canvas.DrawLine(
+                        (float)_draggingNode.X, (float)_draggingNode.Y,
+                        _currentShapeSnapPreview.SnapPoint.X, _currentShapeSnapPreview.SnapPoint.Y,
+                        linePaint);
+                }
+            }
+
+            // Desenha hotbar sempre visível (mesmo com inventário fechado)
+            DrawHotbar(canvas, dpiScale);
+
+            // Desenha inventário se visível
+            _inventoryView.Draw(canvas, dpiScale);
+        }
+
+        /// <summary>
+        /// Desenha preview de linha com opacidade e handles fantasmas
+        /// </summary>
+        private void DrawLinePreview(SKCanvas canvas, float dpiScale, SKPoint start, SKPoint end, bool showHandles)
+        {
+            // Linha com opacidade reduzida (35% conforme spec)
+            using var linePaint = new SKPaint
+            {
+                Color = SKColors.White.WithAlpha((byte)(255 * 0.35f)),
+                StrokeWidth = 2f * dpiScale,
+                IsAntialias = true,
+                StrokeCap = SKStrokeCap.Round
+            };
+
+            canvas.DrawLine(start, end, linePaint);
+
+            // Handles fantasmas
+            if (showHandles)
+            {
+                using var handlePaint = new SKPaint
+                {
+                    Color = SKColors.Yellow.WithAlpha((byte)(255 * 0.35f)),
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Fill
+                };
+
+                using var handleBorderPaint = new SKPaint
+                {
+                    Color = SKColors.Black.WithAlpha((byte)(255 * 0.35f)),
+                    StrokeWidth = 1f * dpiScale,
+                    IsAntialias = true,
+                    Style = SKPaintStyle.Stroke
+                };
+
+                float handleRadius = 6f * dpiScale;
+
+                // Handle no início
+                canvas.DrawCircle(start, handleRadius, handlePaint);
+                canvas.DrawCircle(start, handleRadius, handleBorderPaint);
+
+                // Handle no fim
+                canvas.DrawCircle(end, handleRadius, handlePaint);
+                canvas.DrawCircle(end, handleRadius, handleBorderPaint);
             }
         }
 
@@ -474,6 +730,187 @@ namespace RPA_ULTRA_CORE.ViewModels
         private void OnCanvasInvalidated(CanvasInvalidatedEvent evt)
         {
             _needsRedraw = true;
+        }
+
+        /// <summary>
+        /// Desenha a hotbar na parte inferior
+        /// </summary>
+        private void DrawHotbar(SKCanvas canvas, float dpiScale)
+        {
+            if (_inventoryView.IsVisible) return; // Hotbar já é desenhada pelo inventário
+
+            var bounds = canvas.LocalClipBounds;
+            float hotbarY = bounds.Height - 80;
+            float slotSize = 48f;
+            float padding = 4f;
+            float totalWidth = 7 * (slotSize + padding);
+            float startX = bounds.MidX - totalWidth / 2;
+
+            using (var paint = new SKPaint())
+            {
+                // Background da hotbar
+                paint.Color = SKColors.Black.WithAlpha(100);
+                var hotbarBounds = new SKRect(
+                    startX - 10,
+                    hotbarY - 10,
+                    startX + totalWidth + 10,
+                    hotbarY + slotSize + 10
+                );
+                canvas.DrawRoundRect(hotbarBounds, 8, 8, paint);
+
+                // Desenha os 7 slots
+                for (int i = 0; i < 7; i++)
+                {
+                    float x = startX + i * (slotSize + padding);
+                    var slotBounds = new SKRect(x, hotbarY, x + slotSize, hotbarY + slotSize);
+
+                    // Background do slot
+                    paint.Color = i == _selectedHotbarSlot ?
+                        SKColors.Yellow.WithAlpha(40) :
+                        SKColors.Black.WithAlpha(60);
+                    canvas.DrawRoundRect(slotBounds, 4, 4, paint);
+
+                    // Borda do slot
+                    paint.Color = i == _selectedHotbarSlot ?
+                        SKColors.Yellow.WithAlpha(100) :
+                        SKColors.Gray.WithAlpha(100);
+                    paint.Style = SKPaintStyle.Stroke;
+                    paint.StrokeWidth = 1 * dpiScale;
+                    canvas.DrawRoundRect(slotBounds, 4, 4, paint);
+
+                    // Número do slot
+                    paint.Color = SKColors.Yellow;
+                    paint.Style = SKPaintStyle.Fill;
+                    paint.TextSize = 12 * dpiScale;
+                    paint.IsAntialias = true;
+                    canvas.DrawText((i + 1).ToString(),
+                        x + 4,
+                        hotbarY + 12 * dpiScale,
+                        paint);
+
+                    // Item icon se houver
+                    var item = _inventoryView.GetHotbarItem(i);
+                    if (item != null)
+                    {
+                        // Aqui poderia desenhar o ícone do item
+                        paint.Color = SKColors.White;
+                        paint.TextSize = 10 * dpiScale;
+                        var text = item.Name.Length > 6 ?
+                            item.Name.Substring(0, 6) + "..." :
+                            item.Name;
+                        canvas.DrawText(text,
+                            x + 4,
+                            hotbarY + slotSize - 4,
+                            paint);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// Seleciona um slot da hotbar
+        /// </summary>
+        private void SelectHotbarSlot(int slotIndex)
+        {
+            if (slotIndex >= 0 && slotIndex < 7)
+            {
+                _selectedHotbarSlot = slotIndex;
+                var item = _inventoryView.GetHotbarItem(slotIndex);
+
+                if (item != null)
+                {
+                    // Aqui poderia ativar a ferramenta correspondente
+                    // Por enquanto apenas marca como selecionado
+                }
+
+                RequestRedraw();
+            }
+        }
+
+        /// <summary>
+        /// Callback quando item é dropado do inventário
+        /// </summary>
+        private void OnInventoryItemDropped(object? sender, InventoryItemDroppedEventArgs e)
+        {
+            // Implementar criação do item no canvas
+            var snappedPos = _snapService.Snap(e.DropPosition, AllNodes);
+
+            switch (e.Item.Type)
+            {
+                case InventoryItemType.ShapeBlueprint:
+                    // Cria forma com tamanho padrão
+                    CreateShapeFromBlueprint(e.Item, snappedPos);
+                    break;
+
+                case InventoryItemType.StepImage:
+                    // Cria imagem/step
+                    CreateStepImage(e.Item, snappedPos);
+                    break;
+
+                case InventoryItemType.Action:
+                    // Executa ação
+                    ExecuteItemAction(e.Item, snappedPos);
+                    break;
+            }
+
+            RequestRedraw();
+        }
+
+        /// <summary>
+        /// Cria forma a partir de blueprint
+        /// </summary>
+        private void CreateShapeFromBlueprint(IInventoryItem item, SKPoint position)
+        {
+            // Por enquanto, cria uma forma básica
+            // Futuramente usar IShapeFactory
+
+            if (item.Id.Contains("rect"))
+            {
+                var rect = new RectShape(position.X - 50, position.Y - 25, 100, 50);
+                Shapes.Add(rect);
+            }
+            else if (item.Id.Contains("circle"))
+            {
+                var circle = new CircleShape(position.X, position.Y, 30);
+                Shapes.Add(circle);
+            }
+            // Linha já é criada com SHIFT
+        }
+
+        /// <summary>
+        /// Cria imagem/step no canvas
+        /// </summary>
+        private void CreateStepImage(IInventoryItem item, SKPoint position)
+        {
+            // TODO: Implementar criação de StepImage
+            // Por enquanto cria um placeholder
+        }
+
+        /// <summary>
+        /// Executa ação do item
+        /// </summary>
+        private void ExecuteItemAction(IInventoryItem item, SKPoint position)
+        {
+            if (item.Action != null)
+            {
+                var context = new CanvasContext
+                {
+                    DropPosition = position,
+                    DpiScale = 1.0f,
+                    UserData = this
+                };
+                item.Action(context);
+            }
+        }
+
+        /// <summary>
+        /// Callback quando inventário é fechado
+        /// </summary>
+        private void OnInventoryClosed(object? sender, EventArgs e)
+        {
+            // Retoma edição normal do canvas
+            CurrentToolState = ToolState.Idle;
+            RequestRedraw();
         }
     }
 }

@@ -1,0 +1,47 @@
+# 05 — Sistema de Plugins (MEF)
+
+## Objetivo
+- Inventário populado por **plugins**: cada plugin entrega **seções** + **itens**.
+
+## Descoberta/Carregamento
+- Diretório: `<BaseDirectory>/plugins`.
+- **MEF (`System.Composition`)** para compor exportações.
+- Ponto para futura `AssemblyLoadContext` (não obrigatório agora).
+
+## Interfaces (Plugins.Abstractions)
+```csharp
+public interface IPlugin { IEnumerable<IInventorySection> Sections(); }
+public interface IInventorySection { string Id {get;} string IconResource {get;} IEnumerable<IInventoryItem> Items {get;} }
+public interface IInventoryItem {
+    string Id {get;} string Name {get;} string IconResource {get;}
+    InventoryItemType Type {get;} // ShapeBlueprint | StepImage | Action
+    string[] Tags {get;}
+    object? Defaults {get;}
+}
+public interface IShapeFactory { object Create(CanvasContext ctx, object? defaults); }
+```
+
+## Manifesto JSON (opcional)
+```json
+{
+  "id": "plugin.sample",
+  "name": "Sample Plugin",
+  "version": "1.0.0",
+  "icon": "embedded:section_generic.png",
+  "sections": [
+    {
+      "id": "shapes.basic",
+      "icon": "embedded:shapes.png",
+      "items": [
+        { "id": "shape.line", "name": "Line", "type": "ShapeBlueprint", "icon": "embedded:item_generic.png", "tags": ["shape","line"] }
+      ]
+    }
+  ],
+  "plans": ["free","pro"],     // opcional (futuro orquestrador)
+  "permissions": ["basic"]     // opcional
+}
+```
+
+## Runtime (Plugins.Runtime)
+- Carregar assemblies e/ou manifestos e materializar `Sections` e `Items`.
+- Fornecer para `Inventory.UI` via `IInventoryService`.

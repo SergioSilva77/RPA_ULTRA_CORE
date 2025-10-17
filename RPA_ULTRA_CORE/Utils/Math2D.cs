@@ -93,5 +93,43 @@ namespace RPA_ULTRA_CORE.Utils
         {
             return Distance(point, center) <= radius;
         }
+
+        /// <summary>
+        /// Projeta um ponto em um segmento de linha
+        /// </summary>
+        public static SKPoint ProjectPointOnSegment(SKPoint point, SKPoint lineStart, SKPoint lineEnd)
+        {
+            float A = point.X - lineStart.X;
+            float B = point.Y - lineStart.Y;
+            float C = lineEnd.X - lineStart.X;
+            float D = lineEnd.Y - lineStart.Y;
+
+            float dot = A * C + B * D;
+            float lenSq = C * C + D * D;
+
+            float param = -1;
+            if (lenSq != 0) // linha não é um ponto
+                param = dot / lenSq;
+
+            float xx, yy;
+
+            if (param < 0)
+            {
+                xx = lineStart.X;
+                yy = lineStart.Y;
+            }
+            else if (param > 1)
+            {
+                xx = lineEnd.X;
+                yy = lineEnd.Y;
+            }
+            else
+            {
+                xx = lineStart.X + param * C;
+                yy = lineStart.Y + param * D;
+            }
+
+            return new SKPoint(xx, yy);
+        }
     }
 }

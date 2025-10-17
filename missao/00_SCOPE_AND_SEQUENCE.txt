@@ -1,0 +1,29 @@
+# 00 — ESCOPO & SEQUÊNCIA (LEIA PRIMEIRO)
+
+## Missão
+Você é o engenheiro responsável por **evoluir** o app WPF (já existente) com:
+1) **Pré-visualização contínua** de linhas enquanto SHIFT (rubber-band “apagado”).
+2) **Inventário estilo Minecraft** (seções por ícones, 7 colunas fixas, linhas variáveis, paginação “1 de N”).
+3) **Hotbar** fixa (7 slots) sempre visível e integrada ao inventário.
+4) **Sistema de Plugins (MEF)** que popula o inventário (seções + itens).
+
+> **NÃO QUEBRAR O EXISTENTE**: mudanças **aditivas** e compatíveis. **NÃO** tocar no `.gitignore`.
+> Caminhos relativos devem partir de **AppDomain.CurrentDomain.BaseDirectory** (BaseDirectory).
+
+## Ordem recomendada dos arquivos
+1. 01_BEST_PRACTICES_AND_CONSTRAINTS.txt
+2. 02_DEPENDENCIES_AND_VERSIONS.txt
+3. 03_CANVAS_AND_LINES_SPEC.txt
+4. 04_INVENTORY_MINECRAFT_SPEC.txt
+5. 05_PLUGINS_ARCH_SPEC.txt
+6. 06_ASSETS_AND_RESOURCES_POLICY.txt
+7. 07_INPUTS_HOTKEYS_AND_UI_BEHAVIOR.txt
+8. 08_ACCEPTANCE_CRITERIA_AND_QA.txt
+9. 09_APPSETTINGS_TEMPLATE.json
+
+## Referências cruzadas
+- Inventário remete a: **04**, **06**, **07**, **08**, **09**
+- Plugins: **05**, **06**, **08**, **09**
+- Canvas/Linhas: **03**, **07**, **08**
+
+Inicie pela 01. Ao finalizar cada etapa, valide com **08_ACCEPTANCE_CRITERIA_AND_QA.txt**.

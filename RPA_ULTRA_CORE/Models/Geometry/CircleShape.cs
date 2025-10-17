@@ -4,9 +4,9 @@ using RPA_ULTRA_CORE.Utils;
 namespace RPA_ULTRA_CORE.Models.Geometry
 {
     /// <summary>
-    /// Forma de círculo
+    /// Forma de círculo com suporte a snap no perímetro
     /// </summary>
-    public sealed class CircleShape : BaseShape
+    public sealed class CircleShape : BaseShape, IAnchorProvider
     {
         private readonly Node _center;
         private double _radius;
@@ -21,6 +21,8 @@ namespace RPA_ULTRA_CORE.Models.Geometry
 
         public float StrokeWidth { get; set; } = 2f;
         public SKColor Color { get; set; } = SKColors.White;
+
+        public event EventHandler? Transformed;
 
         public CircleShape(double centerX, double centerY, double radius)
         {
@@ -97,6 +99,7 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         public override void Move(double dx, double dy)
         {
             _center.Move(dx, dy);
+            Transformed?.Invoke(this, EventArgs.Empty);
         }
 
         public override SKRect GetBounds()
@@ -157,6 +160,115 @@ namespace RPA_ULTRA_CORE.Models.Geometry
                 new SKPoint((float)CenterX, (float)CenterY));
 
             Radius = Math.Max(5, distance);
+            Transformed?.Invoke(this, EventArgs.Empty);
         }
+
+        #region IAnchorProvider Implementation
+
+        /// <summary>
+        /// Retorna a âncora mais próxima no perímetro do círculo
+        /// </summary>
+        public ShapeAnchor? GetNearestAnchor(SKPoint world, float tolerancePx)
+        {
+            var center = new SKPoint((float)CenterX, (float)CenterY);
+            var vector = world - center;
+
+            // Se muito próximo do centro, usa ângulo do cursor
+            float length = (float)Math.Sqrt(vector.X * vector.X + vector.Y * vector.Y);
+            if (length < 0.001f)
+            {
+                // Default para direita
+                vector = new SKPoint(1, 0);
+                length = 1;
+            }
+
+            // Normaliza e projeta no perímetro
+            vector.X /= length;
+            vector.Y /= length;
+
+            var anchorPoint = new SKPoint(
+                center.X + vector.X * (float)Radius,
+                center.Y + vector.Y * (float)Radius
+            );
+
+            // Verifica se está dentro da tolerância
+            float distance = Math2D.Distance(world, anchorPoint);
+            if (distance > tolerancePx)
+                return null;
+
+            return new ShapeAnchor
+            {
+                ShapeId = Id.ToString(),
+                Kind = AnchorKind.Perimeter,
+                World = anchorPoint,
+                Angle = (float)Math.Atan2(vector.Y, vector.X),
+                T = 0, // Não usado para círculo
+                EdgeIndex = 0 // Não usado para círculo
+            };
+        }
+
+        /// <summary>
+        /// Enumera pontos de ancoragem (centro + pontos cardeais)
+        /// </summary>
+        public IEnumerable<ShapeAnchor> EnumerateAnchors()
+        {
+            // Centro
+            yield return new ShapeAnchor
+            {
+                ShapeId = Id.ToString(),
+                Kind = AnchorKind.Center,
+                World = new SKPoint((float)CenterX, (float)CenterY),
+                Angle = 0,
+                T = 0,
+                EdgeIndex = 0
+            };
+
+            // Pontos cardeais no perímetro
+            // Direita
+            yield return new ShapeAnchor
+            {
+                ShapeId = Id.ToString(),
+                Kind = AnchorKind.Perimeter,
+                World = new SKPoint((float)(CenterX + Radius), (float)CenterY),
+                Angle = 0,
+                T = 0,
+                EdgeIndex = 0
+            };
+
+            // Topo
+            yield return new ShapeAnchor
+            {
+                ShapeId = Id.ToString(),
+                Kind = AnchorKind.Perimeter,
+                World = new SKPoint((float)CenterX, (float)(CenterY - Radius)),
+                Angle = -(float)Math.PI / 2,
+                T = 0.25f,
+                EdgeIndex = 0
+            };
+
+            // Esquerda
+            yield return new ShapeAnchor
+            {
+                ShapeId = Id.ToString(),
+                Kind = AnchorKind.Perimeter,
+                World = new SKPoint((float)(CenterX - Radius), (float)CenterY),
+                Angle = (float)Math.PI,
+                T = 0.5f,
+                EdgeIndex = 0
+            };
+
+            // Base
+            yield return new ShapeAnchor
+            {
+                ShapeId = Id.ToString(),
+                Kind = AnchorKind.Perimeter,
+                World = new SKPoint((float)CenterX, (float)(CenterY + Radius)),
+                Angle = (float)Math.PI / 2,
+                T = 0.75f,
+                EdgeIndex = 0
+            };
+        }
+
+        #endregion
     }
 }

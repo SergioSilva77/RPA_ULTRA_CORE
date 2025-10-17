@@ -1,0 +1,11 @@
+# 01 — Boas Práticas & Restrições
+
+- **Não modifique** nada listado em **.gitignore**. Não renomeie/clique especialmente pastas/arquivos existentes.
+- **Mudanças aditivas**: adicione classes/serviços/Views; evite destruição/refatoração agressiva.
+- **Compatibilidade**: mantenha comportamentos atuais. Se precisar alterar, isole por interface/feature-flag.
+- **BaseDirectory**: use `AppDomain.CurrentDomain.BaseDirectory` como raiz para **plugins** e **assets**.
+- **APIs estáveis**: SkiaSharp **2.88.x** (ex.: **2.88.6**). Evite APIs de versões mais novas.
+- **MVVM + SOLID + Observer + Singleton(EventBus)**. **XAML mínimo**.
+- **Sem paths expostos** na UI. Ícones/Imagens por **embedded** (override opcional via config).
+- **Performance**: cache de `SKImage` para ícones; reuso de `SKPaint`; evitar alocações em loops de desenho.
+- **Logs** opcionais e discretos; não exibir caminhos internos.

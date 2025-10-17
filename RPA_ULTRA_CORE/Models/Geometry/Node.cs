@@ -9,7 +9,8 @@ namespace RPA_ULTRA_CORE.Models.Geometry
     {
         private double _x;
         private double _y;
-        private SegmentAttachment? _attachment;
+        private SegmentAttachment? _segmentAttachment;
+        private ShapeAttachment? _shapeAttachment;
         private bool _isUserMoving;
 
         public Guid Id { get; }
@@ -24,17 +25,22 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         /// <summary>
         /// Indica se o Node está anexado no meio de um segmento
         /// </summary>
-        public bool IsAttachedMidSpan => _attachment?.Mode == AttachmentMode.MidSpan;
+        public bool IsAttachedMidSpan => _segmentAttachment?.Mode == AttachmentMode.MidSpan;
 
         /// <summary>
         /// Indica se o Node está anexado a um endpoint
         /// </summary>
-        public bool IsAttachedEndpoint => _attachment?.Mode == AttachmentMode.Endpoint;
+        public bool IsAttachedEndpoint => _segmentAttachment?.Mode == AttachmentMode.Endpoint;
+
+        /// <summary>
+        /// Indica se o Node está anexado a uma forma
+        /// </summary>
+        public bool IsAttachedToShape => _shapeAttachment != null;
 
         /// <summary>
         /// Indica se o Node está livre (não anexado)
         /// </summary>
-        public bool IsFree => _attachment == null;
+        public bool IsFree => _segmentAttachment == null && _shapeAttachment == null;
 
         public Node(double x, double y)
         {
@@ -93,8 +99,8 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         public void AttachTo(LineShape parent, double t)
         {
             Detach(); // Remove anexação anterior se houver
-            _attachment = new SegmentAttachment(parent, t, this);
-            _attachment.Bind();
+            _segmentAttachment = new SegmentAttachment(parent, t, this);
+            _segmentAttachment.Bind();
         }
 
         /// <summary>
@@ -103,8 +109,18 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         public void AttachToEndpoint(Node endpointNode)
         {
             Detach(); // Remove anexação anterior se houver
-            _attachment = new SegmentAttachment(endpointNode, this);
-            _attachment.Bind();
+            _segmentAttachment = new SegmentAttachment(endpointNode, this);
+            _segmentAttachment.Bind();
+        }
+
+        /// <summary>
+        /// Anexa o Node a uma forma (perímetro ou centro)
+        /// </summary>
+        public void AttachToShape(IAnchorProvider shape, ShapeAnchor anchor)
+        {
+            Detach(); // Remove anexação anterior se houver
+            _shapeAttachment = new ShapeAttachment(this, anchor.ShapeId, anchor.Kind, anchor.T, anchor.Angle, anchor.EdgeIndex);
+            _shapeAttachment.Bind(shape);
         }
 
         /// <summary>
@@ -112,8 +128,10 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         /// </summary>
         public void Detach()
         {
-            _attachment?.Unbind();
-            _attachment = null;
+            _segmentAttachment?.Unbind();
+            _segmentAttachment = null;
+            _shapeAttachment?.Unbind();
+            _shapeAttachment = null;
         }
 
         /// <summary>

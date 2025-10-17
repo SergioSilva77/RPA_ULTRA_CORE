@@ -1,0 +1,61 @@
+# 03 — Canvas & Linhas (SkiaSharp + SHIFT Preview + Galhos no Tronco)
+
+## Objetivo
+- **SHIFT pressionado** → **pré-visualização contínua** (linha “apagada”) com **snap** em tempo real + **handles fantasmas**.
+- Regras de **conexão** entre linhas e com formas/steps:
+  - **Endpoints** (com handles) e **mid-span** (“galhos no tronco” com parâmetro t∈[0,1]).
+  - Mover/esticar **pai** → filhas acompanham proporcionalmente (recalcular por Lerp usando `t`).
+  - Mover **filha** no **meio** → **Detach** (desencaixa).
+  - Mover **filha** em **endpoint** do pai → mover **endpoint do pai** junto.
+
+## Snap
+- **Grid** 8 px; **Endpoints** (≤ 6 px); **Mid-span** (projeção no segmento → obter `t`, clamp [0,1]).
+- Durante a **prévia**, aplicar snap em tempo real.
+
+## Assinaturas sugeridas
+```csharp
+public sealed class Node
+{
+    public Guid Id { get; } = Guid.NewGuid();
+    public double X { get; private set; }
+    public double Y { get; private set; }
+    public event EventHandler? PositionChanged;
+
+    private SegmentAttachment? _attachment; // null => livre
+    public void Set(double x, double y) { X=x; Y=y; PositionChanged?.Invoke(this, EventArgs.Empty); }
+    public void AttachTo(LineShape parent, double t) { /* MidSpan */ }
+    public void AttachToEndpoint(Node endpointNode) { /* Endpoint */ }
+    public void Detach() { /* Unbind */ }
+    public bool IsAttachedMidSpan => _attachment?.Mode == AttachmentMode.MidSpan;
+    public bool IsAttachedEndpoint => _attachment?.Mode == AttachmentMode.Endpoint;
+}
+
+public enum AttachmentMode { MidSpan, Endpoint }
+
+public sealed class LineShape : BaseShape
+{
+    public Node Start { get; }
+    public Node End { get; }
+    public float StrokeWidth { get; set; } = 2f;
+    public override void Draw(SKCanvas canvas, float dpi);
+    public override bool HitTestPoint(SKPoint p, float tol);
+    public override void Move(double dx, double dy) { Start.Set(Start.X+dx, Start.Y+dy); End.Set(End.X+dy, End.Y+dy); }
+}
+
+public sealed class SegmentAttachment
+{
+    public AttachmentMode Mode { get; }
+    public LineShape? ParentLine { get; }
+    public Node? EndpointNode { get; }
+    public double T { get; private set; }
+    public SKPoint GetWorld() { /* Lerp(Start, End, T) ou endpoint */ }
+    public void Bind(); public void Unbind();
+}
+```
+
+## Estilo da prévia
+- Opacidade ≈ **0.35**, mesma estética “apagada” do inventário.
+- **Handles fantasmas** (start/end) visíveis durante SHIFT.
+
+## Não quebrar
+- Implementar de forma **aditiva**; **não** remover/refatorar agressivo.

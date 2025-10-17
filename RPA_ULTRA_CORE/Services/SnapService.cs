@@ -19,7 +19,18 @@ namespace RPA_ULTRA_CORE.Services
     }
 
     /// <summary>
-    /// Serviço para snap-to-grid, snap-to-endpoint e snap-to-line (mid-span)
+    /// Resultado de snap para forma
+    /// </summary>
+    public class ShapeSnapResult
+    {
+        public bool CanSnap { get; set; }
+        public IAnchorProvider? TargetShape { get; set; }
+        public ShapeAnchor? Anchor { get; set; }
+        public SKPoint SnapPoint { get; set; }
+    }
+
+    /// <summary>
+    /// Serviço para snap-to-grid, snap-to-endpoint, snap-to-line (mid-span) e snap-to-shape
     /// </summary>
     public class SnapService
     {
@@ -31,6 +42,7 @@ namespace RPA_ULTRA_CORE.Services
         public bool EnableGridSnap { get; set; } = true;
         public bool EnableEndpointSnap { get; set; } = true;
         public bool EnableLineSnap { get; set; } = true;
+        public bool EnableShapeSnap { get; set; } = true;
 
         /// <summary>
         /// Aplica snap em um ponto
@@ -170,6 +182,96 @@ namespace RPA_ULTRA_CORE.Services
             }
 
             return bestSnap;
+        }
+
+        /// <summary>
+        /// Detecta snap em forma (perímetro ou centro)
+        /// </summary>
+        public ShapeSnapResult? DetectShapeSnap(SKPoint point, IEnumerable<BaseShape> shapes, BaseShape? excludeShape = null)
+        {
+            if (!EnableShapeSnap)
+                return null;
+
+            ShapeSnapResult? bestSnap = null;
+            float minDistance = float.MaxValue;
+
+            foreach (var shape in shapes)
+            {
+                if (shape == excludeShape)
+                    continue;
+
+                // Verifica se a forma implementa IAnchorProvider
+                if (shape is not IAnchorProvider anchorProvider)
+                    continue;
+
+                // Tenta obter a âncora mais próxima
+                var anchor = anchorProvider.GetNearestAnchor(point, SnapTolerance);
+
+                if (anchor != null)
+                {
+                    var distance = Math2D.Distance(point, anchor.World);
+
+                    if (distance < minDistance)
+                    {
+                        minDistance = distance;
+                        bestSnap = new ShapeSnapResult
+                        {
+                            CanSnap = true,
+                            TargetShape = anchorProvider,
+                            Anchor = anchor,
+                            SnapPoint = anchor.World
+                        };
+                    }
+                }
+            }
+
+            return bestSnap;
+        }
+
+        /// <summary>
+        /// Snap combinado: tenta primeiro shapes, depois endpoints, depois linhas, e por fim grid
+        /// </summary>
+        public SKPoint SnapWithPriority(SKPoint point, IEnumerable<BaseShape> shapes, IEnumerable<Node>? nodes = null, BaseShape? excludeShape = null)
+        {
+            SKPoint result = point;
+
+            // Prioridade 1: Snap em shapes (perímetro/centro)
+            if (EnableShapeSnap && shapes != null)
+            {
+                var shapeSnap = DetectShapeSnap(point, shapes, excludeShape);
+                if (shapeSnap?.CanSnap == true)
+                {
+                    return shapeSnap.SnapPoint;
+                }
+            }
+
+            // Prioridade 2: Snap em endpoints
+            if (EnableEndpointSnap && nodes != null)
+            {
+                var snappedNode = SnapToNode(point, nodes);
+                if (snappedNode != null)
+                {
+                    return new SKPoint((float)snappedNode.X, (float)snappedNode.Y);
+                }
+            }
+
+            // Prioridade 3: Snap em linhas (mid-span)
+            if (EnableLineSnap && shapes != null)
+            {
+                var lineSnap = DetectLineSnap(point, shapes, excludeShape);
+                if (lineSnap?.CanSnap == true && !lineSnap.IsEndpoint)
+                {
+                    return lineSnap.SnapPoint;
+                }
+            }
+
+            // Prioridade 4: Grid
+            if (EnableGridSnap)
+            {
+                result = Math2D.SnapToGrid(point, GridSize);
+            }
+
+            return result;
         }
     }
 }

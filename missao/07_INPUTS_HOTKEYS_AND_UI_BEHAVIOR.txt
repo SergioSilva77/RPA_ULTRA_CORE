@@ -1,0 +1,20 @@
+# 07 — Entradas, Teclas & Comportamento
+
+## Teclas
+- **SHIFT**: desenhar linha com **pré-visualização contínua** (apagada), **snap real-time**, **handles fantasmas**.
+- **E**: abre/fecha inventário (pausa edição do canvas).
+- **1..7**: inventário aberto → atribui item em **hover** ao slot; inventário fechado → **seleciona** slot ativo.
+- **ESC**: fecha inventário / cancela ação atual.
+
+## Drag-and-drop (Inventário/Hotbar → Canvas)
+- Mostrar **ghost preview** por cima do `SKElement`.
+- Snap em real-time: grid (8 px), endpoints (≤ 6 px), mid-span (projeção com `t`).
+- Drop cria:
+  - `ShapeBlueprint` com tamanho padrão;
+  - `StepImage` centralizado; 
+  - `Action` (se aplicável).
+
+## Canvas ↔ Conexões
+- Linhas ↔ Formas: **ponto mais próximo** do perímetro.
+- Linhas ↔ StepImage: **centro**.
+- Linhas ↔ Linhas: **mid-span** (galhos no tronco). Regras de mover/desanexar/endpoint conforme 03.

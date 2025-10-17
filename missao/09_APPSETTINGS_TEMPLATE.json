@@ -1,0 +1,28 @@
+{ 
+  "Paths": {
+    "Base": "%AppBase%",
+    "PluginsDir": "%AppBase%/plugins",
+    "AssetsDir": "%AppBase%/assets"
+  },
+  "Inventory": {
+    "Columns": 7,
+    "SearchScope": "CurrentSectionOnly"
+  },
+  "Hotbar": { "Size": 7 },
+  "Preview": {
+    "LineOpacity": 0.35,
+    "ApplySnapRealtime": true
+  },
+  "Snap": { "Grid": 8, "TolerancePx": 6 },
+  "Keybinds": { "Inventory": "E" },
+  "Resources": {
+    "UseEmbeddedAsDefault": true,
+    "AllowDiskOverrides": true,
+    "DiskOverrideIconsDir": "%AppBase%/assets/icons"
+  },
+  "Features": {
+    "EnableInventory": true,
+    "EnablePlugins": true,
+    "EnableShiftPreview": true
+  }
+}

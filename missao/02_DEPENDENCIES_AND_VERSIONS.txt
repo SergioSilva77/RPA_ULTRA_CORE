@@ -1,0 +1,35 @@
+# 02 — Dependências & Versões (fixe)
+
+## Host (WPF existente)
+- SkiaSharp 2.88.6
+- SkiaSharp.Views.WPF 2.88.6
+- SkiaSharp.NativeAssets.Win32 2.88.6
+- Microsoft.Extensions.Configuration 8.0.0
+- Microsoft.Extensions.Configuration.Json 8.0.0
+- Microsoft.Extensions.Configuration.Binder 8.0.0
+- Microsoft.Extensions.DependencyInjection 8.0.0
+
+## Core (formas/linhas/serviços)
+- SkiaSharp 2.88.6
+- SkiaSharp.NativeAssets.Win32 2.88.6
+- Newtonsoft.Json 13.0.3
+
+## Inventory.UI
+- SkiaSharp 2.88.6
+- SkiaSharp.NativeAssets.Win32 2.88.6
+
+## Plugins.Abstractions
+- System.Composition.AttributedModel 7.0.0
+
+## Plugins.Runtime
+- System.Composition.Hosting 7.0.0
+- System.Composition.Runtime 7.0.0
+- System.Composition.AttributedModel 7.0.0
+- Newtonsoft.Json 13.0.3
+
+## Plugins.* (Shapes/Browser/Database)
+- (Shapes) SkiaSharp 2.88.6 + SkiaSharp.NativeAssets.Win32 2.88.6
+- (Todos) referenciam Plugins.Abstractions
+
+## Resources (imagens)
+- — (embedded resources no assembly)
