@@ -1,0 +1,18 @@
+# 06 — Política de Assets & Resources
+
+## Princípios
+- **Não expor** caminhos de imagens/ícones ao usuário.
+- **Default**: **EmbeddedResource** em assembly (ex.: `Sketcher.Resources`).
+- **Override opcional** (silencioso) via config:
+  - `<BaseDirectory>/assets/icons/...` (se houver arquivo, usa; senão, fallback para embedded).
+- **NUNCA** listar paths na UI; renderize apenas o `SKImage`.
+
+## Carregamento de ícones
+- Resolver **embedded** via `Assembly.GetManifestResourceStream(...)`.
+- Cachear `SKImage` em dicionário (`key → SKImage`) para reuso.
+- Em erro/missing: usar placeholder padrão (embedded).
+
+## Config (veja 09_APPSETTINGS_TEMPLATE.json)
+- `Resources.UseEmbeddedAsDefault = true`
+- `Resources.AllowDiskOverrides = true`
+- `Resources.DiskOverrideIconsDir = "%AppBase%/assets/icons"`

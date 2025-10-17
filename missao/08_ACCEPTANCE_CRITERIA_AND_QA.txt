@@ -1,0 +1,31 @@
+# 08 — Critérios de Aceite & QA
+
+1) **SHIFT Preview**
+   - Linha “apagada” (opacidade ~0.35) visível **enquanto** SHIFT.
+   - Snap **em tempo real** + **handles fantasmas**.
+
+2) **Inventário**
+   - Overlay (E) pausa edição; **seções por ícones**; **7 colunas**; **linhas variáveis**.
+   - Paginação “**1 de N**” com **cliques** nas setas (sem atalhos).
+   - **Pesquisa** só na seção atual (nome + tags).
+   - **Hotbar** 7 slots sempre visível; **1..7** atribui/seleciona conforme estado; permite duplicados.
+   - Drag-and-drop → ghost + snap; drop cria item com tamanho padrão.
+
+3) **Conexões**
+   - Formas: perímetro (ponto mais próximo). StepImage: centro.
+   - Mid-span entre linhas com `t`:
+     - mover/esticar pai → filhas acompanham proporcionalmente;
+     - mover filha no meio → **Detach**;
+     - mover filha no endpoint → move endpoint do pai.
+
+4) **Plugins**
+   - Carregamento via MEF a partir de `<BaseDirectory>/plugins`.
+   - Plugins fornecem seções/itens ao inventário.
+   - Manifesto JSON opcional lido se existir.
+
+5) **Assets**
+   - Ícones via **embedded** (override opcional). **Sem paths** exibidos.
+   - Cache de `SKImage`.
+
+6) **Não quebrar**
+   - Tudo aditivo, sem mexer no `.gitignore`. Aplicação existente permanece funcional.

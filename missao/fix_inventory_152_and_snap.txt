@@ -1,0 +1,133 @@
+# FIX — Inventário (modelo 1.5.2) + Snap em Formas
+(Engenheiro: aplicar **mudanças aditivas**. **NÃO** tocar no `.gitignore`. Usar **AppDomain.CurrentDomain.BaseDirectory**. Ícones como **embedded** com override opcional. Manter todas as regras já feitas de linhas/mid‑span/galhos no tronco.)
+
+========================================
+A) INVENTÁRIO — ALINHAR AO MODELO "MINECRAFT 1.5.2"
+========================================
+## Problema
+Foi implementado um inventário no estilo 1.0. Precisamos do **modelo de 1.5.2** (padrão “Creative Inventory” dessa era), mantendo nossa especificação anterior:
+
+### Requisitos obrigatórios (reafirmação + ajustes)
+1. **Seções por ícones (topo)**, sem texto. Aba **Pesquisa** é uma **seção** como as demais (apenas ícone).
+2. **Grid 7 colunas fixas** em todas as seções. **Linhas variáveis** conforme altura/itens.
+3. **Paginação “1 de N” no canto superior direito**, com **setas clicáveis ‹ ›**. **Sem** atalhos de teclado para paginação.
+4. **Pesquisa limita-se à seção atual** (nome + tags). Ao trocar de seção: **limpar pesquisa** e **voltar à página 1**.
+5. **Hotbar** 7 slots **sempre visível**. Inventário aberto: **1..7** atribui o item em **hover** ao slot. Inventário fechado: **1..7** seleciona o slot ativo. **Duplicados permitidos**.
+6. **Overlay** abre com **E** (toggle) e **ESC** fecha. Ao arrastar/soltar item, **overlay permanece aberto**.
+7. **Tooltips**: fundo **preto**, texto **branco**; 1ª linha **Nome**, linhas seguintes (máx 3) com **quebras \n**.
+8. **Estados visuais** de slots (normal/hover/selecionado). Realce claro da **seção ativa**.
+9. Ícones **via embedded resource** por padrão; **override opcional** via config. **Não** exibir paths reais na UI.
+10. **Sem refatoração destrutiva**: atualize apenas o necessário na UI e nos serviços do inventário para cumprir o layout/comportamento de 1.5.2.
+
+### Aceite — Inventário
+- Vê-se topo com **ícones de seções**, grid **7×(linhas variáveis)**, **“1 de N”** + **‹ ›** (cliques) no topo direito.
+- **Pesquisa** filtra a **seção atual** e a paginação reflete o conjunto filtrado.
+- **Hotbar** opera conforme descrito (atribuir/selecionar).
+- Visual geral remete ao **modelo de 1.5.2** (abas por ícone, paginação clara, sem textos nos tabs).
+
+========================================
+B) SNAP EM FORMAS (Círculo, Retângulo, Triângulo, Losango, Step com Imagem)
+========================================
+## Problema
+A linha **não está fazendo snap** nas formas e steps.
+
+## Objetivo
+Implementar **snap e conexão** das linhas a:
+- **Formas geométricas**: Círculo, Retângulo, Triângulo, Losango — usando **ponto mais próximo do perímetro**.
+- **StepImage**: **centro** do item (anchor central).
+
+## Diretrizes
+1. **Prévia (SHIFT)**: o **ghost da linha** e **handles fantasmas** já devem usar snap **em tempo real**.
+2. **Commit**: ao soltar o mouse (ou finalizar SHIFT), criar/ajustar o **Node** do endpoint para o **ponto de snap**:
+   - Formas: **perímetro mais próximo** (ver cálculos abaixo).
+   - StepImage: **centro**.
+3. **Movimentação**: se a forma/step mover/rotacionar/redimensionar (se aplicável), os **Nodes** presos devem acompanhar (Observer).
+4. **Compatível com mid‑span** (linhas ↔ linhas) já existente.
+
+## Interface sugerida (unificação)
+```csharp
+public interface IAnchorProvider
+{
+    // Retorna a âncora de snapping mais apropriada a partir do ponto world-space.
+    ShapeAnchor GetNearestAnchor(SKPoint world, float tolerancePx);
+    // (Opcional) Todos anchors estáticos (cantos, centro, etc.) se quiser expor além do perímetro contínuo.
+    IEnumerable<ShapeAnchor> EnumerateAnchors();
+}
+
+public sealed class ShapeAnchor
+{
+    public string ShapeId { get; init; }           // para Observer/atualização
+    public AnchorKind Kind { get; init; }          // Perimeter, Corner, EdgeMid, Center, Custom
+    public SKPoint World { get; set; }             // posição atual
+    // Parâmetros p/ recomputar quando a forma muda:
+    public float T;        // perímetro paramétrico (0..1) para linhas/polígonos
+    public float Angle;    // para círculos (ângulo polar)
+    public int EdgeIndex;  // para polígonos, se necessário
+}
+public enum AnchorKind { Perimeter, Corner, EdgeMid, Center, Custom }
+```
+
+### Cálculos de perímetro (resumo)
+- **Círculo (centro C, raio R)**: projeção radial.
+  - Vetor `v = P - C`; se `|v| < epsilon`, usar ângulo do cursor relativo ao eixo X (atan2).
+  - `A = C + R * normalize(v)` → **ponto de snap** no perímetro.
+  - Armazenar `Angle = atan2(v.y, v.x)` no `ShapeAnchor` para recomputar quando C/R mudarem.
+- **Retângulo axis‑aligned (cx,cy,w,h)**: projeção no **contorno** (clamp + escolher aresta mais próxima).
+  - Projetar P para o retângulo expandido pelas bordas e escolher o **ponto na borda** com menor distância.
+  - Cuidar de cantos: permitem snap natural por proximidade.
+  - Parametrização por **aresta + t local** (0..1) se quiser recomputar facilmente em resize.
+- **Triângulo/Losango/Polígono convexo**: projeção ponto‑segmento em cada **aresta**; pegar o ponto mínimo.
+  - Guardar `(EdgeIndex, t)` no `ShapeAnchor` para recomputar.
+- **StepImage** (retângulo/bounding box): **Centro** (Kind=Center). Anchors futuros opcionais.
+
+### Fluxo (prévia e commit)
+- **Prévia (SHIFT/Mover Handle)**: `SnapService.GetNearest(world)` consulta as formas/steps visíveis:
+  1) tenta **endpoints de linhas** (regras atuais);
+  2) tenta **perímetros** de formas e **centro** de steps;
+  3) aplica **grid** se nenhum anchor elegível.
+- **Visual**: quando snapping ativo, desenhar um **indicador** (pequeno círculo) em `ShapeAnchor.World`.
+- **Commit**: se distância <= tolerância (6 px), **conectar** criando um **Attachment**:
+  - Para formas/steps: `Node.AttachTo(shape, ShapeAnchor)` (novo tipo de attachment).
+  - Para linhas (mid‑span): manter `Node.AttachTo(line, t)` existente.
+
+### Attachment para formas/steps
+```csharp
+public sealed class ShapeAttachment
+{
+    public string ShapeId { get; }
+    public AnchorKind Kind { get; }
+    public float T { get; }        // para perímetro/aresta
+    public float Angle { get; }    // para círculo
+    public int EdgeIndex { get; }  // polígono
+    private readonly Node _owner;
+    // subscribe no evento de transformação/posição da forma
+    public void Bind(IShape shape);
+    public void Unbind();
+    public SKPoint GetWorld(IShape shape);
+}
+```
+- As formas devem publicar evento `Transformed` / `PositionChanged`. O `Node` observador chama `Set(attachment.GetWorld(shape))` quando a forma muda.
+
+### Aceite — Snap em Formas
+- **SHIFT prévia**: endpoints “puxam” para o perímetro/centro conforme a forma/step mais próximo (indicador visível).
+- **Ao soltar**: a linha se conecta de fato; movendo a forma, o endpoint acompanha.
+- Funciona para **Círculo**, **Retângulo**, **Triângulo**, **Losango** e **StepImage** (centro).
+- Regras de **mid‑span** (linhas↔linhas) continuam válidas.
+
+========================================
+C) POLÍTICAS DE NÃO‑DESTRUIÇÃO
+========================================
+- **Não** apagar/renomear arquivos existentes; **não** mexer no `.gitignore`.
+- **Aditivo**: novas interfaces/serviços/Views; preservar comportamento atual.
+- Se precisar alterar algo, **isole** via interface e mantenha fallback compatível.
+- **Feature flags** em config para ligar/desligar Inventário, Plugins e ShiftPreview (mantidas).
+
+========================================
+D) CHECKLIST RÁPIDO
+========================================
+- [ ] Inventário ajustado ao **modelo 1.5.2** (abas‑ícone, 7 colunas, linhas variáveis, “1 de N”, cliques nas setas, pesquisa local).
+- [ ] Snap implementado em **todas as formas** e **StepImage** (prévia + commit).
+- [ ] Indicador visual de snap em prévia.
+- [ ] Attachments reagem a **movimento da forma** (Observer).
+- [ ] Sem regressões nas regras de linhas (mid‑span, endpoints, galhos no tronco).
+- [ ] Sem tocar no `.gitignore`; mudanças aditivas.

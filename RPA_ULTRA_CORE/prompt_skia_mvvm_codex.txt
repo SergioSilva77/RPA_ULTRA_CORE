@@ -1,0 +1,194 @@
+>> NÃO MODIFIQUE O .gitignore. **Apenas** adicione/edite arquivos do app conforme abaixo.
+
+Crie em WPF (.NET 8, `net8.0-windows`) uma **tela preta** para desenho vetorial usando **SkiaSharp** (render em `SKElement` via `SkiaSharp.Views.WPF`). Trabalhe **majoritariamente em C# (POO) e pouco XAML**, mantendo **MVVM**, SOLID (SRP, OCP, LSP, ISP, DIP), **Observer**, **Singleton**, **Clean Code** e **comentários relevantes**.
+Evite APIs recentes demais: use apenas SkiaSharp 2.88.x (ex.: `SkiaSharp` e `SkiaSharp.Views.WPF` 2.88.x) e tipos clássicos (`SKCanvas`, `SKPaint`, `SKPoint`, `SKRect`, `SKPath`, `SKMatrix`).
+
+========================================
+OBJETIVO
+========================================
+Uma tela preta onde posso **criar, mover, excluir e redimensionar**:
+- Linhas (com **handles** circulares nos pontos `Start(x,y)` e `End(x,y)`).
+- Retângulos.
+- Círculos.
+- (Futuras formas devem ser fáceis de adicionar sem quebrar o design).
+
+**Regras especiais para LINHAS (mais trabalhosas):**
+- **SHIFT pressionado**: entra em modo **criar nova linha** (click define `Start`, mover define `End`, soltar mouse conclui). Ao **soltar SHIFT**, a linha fica “livre” para selecionar/mover.
+- Cada linha mostra **bolinhas/handles** nos pontos `start` e `end`. Ao arrastar um handle, a linha é **redimensionada**.
+- **Conexões entre linhas**: endpoints podem **conectar** a um mesmo **Node** compartilhado. Ao mover um **ponto interconectado**, **todas as linhas** ligadas ao mesmo Node **acompanham de forma uniforme**.
+- Ao mover/esticar uma “linha principal” com linhas conectadas, as “filhas” **acompanham** conforme o **Node** compartilhado (propagação coerente).
+- **Snap**: endpoints **encaixam** em outros endpoints próximos e opcionalmente em **grid** (8 px) com tolerância (ex.: 10 px).
+
+========================================
+STACK & PACOTES
+========================================
+- `TargetFramework`: `net8.0-windows`
+- WPF + `SkiaSharp` 2.88.x + `SkiaSharp.Views.WPF` 2.88.x
+- MVVM (sem frameworks pesados; use ICommand, ObservableCollection, etc.)
+- **Não** altere `.gitignore`.
+- **XAML mínimo**: janela com um `SKElement` esticado em tela, fundo preto.
+
+========================================
+ARQUITETURA (PASTAS/APIS)
+========================================
+`/Views`
+- `SketchView.xaml` (mínimo XAML) contendo um `SKElement` (fundo preto).
+- `SketchView.xaml.cs` **apenas** para *wire-up* de eventos do `SKElement` (PaintSurface, MouseDown, MouseMove, MouseUp, KeyDown/Up) delegando ao VM.
+
+`/ViewModels`
+- `SketchViewModel` (estado e comandos; coordena serviços e coleção de shapes).
+- `ToolState` com estados: `Idle`, `DrawingLine`, `DraggingShape`, `DraggingHandle`, `MarqueeSelect` (se implementar), etc.
+
+`/Models/Geometry`
+- `Node` (X, Y) — **ponto de conexão** compartilhado. Implementa **Observer** (evento `PositionChanged`).
+- `BaseShape` (Id, Bounds, IsSelected, virtual `Draw(SKCanvas)`, `HitTest(...)`, `Move(dx, dy)`, etc.).
+- `LineShape` (StartNode, EndNode, StrokeWidth, etc.). **Observa** seus `Node`s e redesenha ao mudar.
+- `RectShape` (X, Y, W, H, Radius?).
+- `CircleShape` (CenterX, CenterY, Radius).
+- `IConnectable` (expor endpoints caso necessário).
+
+`/Services`
+- `RenderService` (configura paints, escalas, conversões DP↔SK, etc.).
+- `HitTestService` (teste de colisão: ponto em handle, proximidade de linha — distância ponto-segmento).
+- `SnapService` (snap-to-grid e snap-to-endpoint com tolerância).
+- `ConnectionService` (anexa/destaca endpoints a `Node`s).
+- `SelectionService` (seleção única/múltipla, foco, toggles).
+- `UndoRedoService` (opcional).
+- `EventBus` (**Singleton**, leve; pattern Pub/Sub para eventos do canvas).
+
+`/Behaviors` (opcional)
+- Helpers para ligar eventos do SKElement ao VM (se preferir evitar code-behind).
+
+`/Utils`
+- `Math2D` (distâncias, projeções, clamp, etc.).
+- `Guard` (validações simples).
+
+`/Commands`
+- `ICommand` concretos: `DeleteSelectionCommand`, `ClearCanvasCommand`, etc.
+
+========================================
+COMPORTAMENTOS & ATALHOS
+========================================
+- **SHIFT** pressionado: modo **Criar Linha** (enquanto mantido).
+- **Soltar SHIFT**: volta ao modo padrão (**Idle**).
+- **Clique** em handle de linha: entra em **DraggingHandle**.
+- **Clique + arrastar** numa forma: **move**.
+- **DELETE**: remove seleção atual (linhas removem-se sem “vazar” nodes órfãos; limpe Nodes sem referências).
+- **CTRL+A** (opcional): seleciona tudo.
+- **ESC**: cancela ação corrente.
+- Cursor muda conforme contexto (criado via WPF sem dependências; opcional).
+
+========================================
+DETALHES ESSENCIAIS (LINHAS & CONEXÕES)
+========================================
+- **Node** é a fonte da verdade para pontos conectados: `LineShape` referencia `StartNode` e `EndNode`.
+- Mover um **Node** dispara evento `PositionChanged`; todas as `LineShape`s conectadas **observam** e atualizam.
+- **Mover linha inteira** (drag no corpo da linha): translada ambos nodes proporcionalmente (`dx, dy`). As demais linhas que **compartilham** um desses nodes se atualizam automaticamente (efeito de rede).
+- **Redimensionar por handle**: só move o `Node` correspondente (start **ou** end).
+- **Snap**: ao soltar handle perto de outro endpoint, chame `ConnectionService.Connect(aNode, bNode)` (ou **merge** de nodes); para grid, `SnapService.Snap(point)` antes de aplicar.
+- **HitTestService**: 
+  - Hit em handle: círculo de raio 6–8 px (screen space).
+  - Hit em linha: use distância ponto→segmento com limiar (ex.: ≤ 6 px).
+
+========================================
+XAML (MÍNIMO)
+========================================
+- Uma janela com `Grid` e `SKElement` (`HorizontalAlignment="Stretch" VerticalAlignment="Stretch"`), fundo preto.
+- `SketchView.xaml.cs` registra eventos de input e os **repassa** ao `SketchViewModel`.
+
+========================================
+FLUXO DE INPUT (PSEUDOCÓDIGO)
+========================================
+- `OnMouseDown(pt)`:
+  - Se **SHIFT**: 
+    - se estado `Idle` ⇒ `ToolState = DrawingLine` e crie `tempStartNode = new Node(ptSnapped)`;
+  - Senão:
+    - verifique `HitTest` de handles ⇒ `DraggingHandle` (guarde qual Node).
+    - senão verifique hit em shape ⇒ `DraggingShape` (guarde offset).
+
+- `OnMouseMove(pt)`:
+  - `DrawingLine`: render de pré-visualização (linha fantasma entre `tempStartNode` e `ptSnapped`).
+  - `DraggingHandle`: mova `Node` do handle para `ptSnapped` (propaga via Observer).
+  - `DraggingShape`: translade shape (`dx, dy`) atualizando Nodes (propaga).
+
+- `OnMouseUp(pt)`:
+  - `DrawingLine`: crie `tempEndNode = Snap/Connect(pt)`; instancie `LineShape(startNode, endNode)` e adicione ao VM.
+  - `DraggingHandle` / `DraggingShape`: finalize, aplique `Snap/Connect` e normalize seleção.
+  - `ToolState = Idle` se aplicável.
+
+- `OnKeyDown/Up`:
+  - Manter flag de **SHIFT**.
+  - `Delete` ⇒ remover seleção (+ coleta de `Node`s órfãos).
+  - `Esc` ⇒ cancelar estado transitório.
+
+========================================
+INTERFACES & ASSINATURAS SUGERIDAS
+========================================
+```csharp
+public sealed class Node
+{
+    public Guid Id { get; }
+    public double X { get; private set; }
+    public double Y { get; private set; }
+    public event EventHandler? PositionChanged;
+    public void Set(double x, double y) { /* atualiza + dispara evento */ }
+}
+
+public abstract class BaseShape
+{
+    public Guid Id { get; } = Guid.NewGuid();
+    public bool IsSelected { get; set; }
+    public abstract void Draw(SKCanvas canvas, float dpiScale);
+    public abstract bool HitTestPoint(SKPoint p, float tolerance);
+    public virtual void Move(double dx, double dy) { /* default translate */ }
+}
+
+public sealed class LineShape : BaseShape
+{
+    public Node Start { get; }
+    public Node End { get; }
+    public float StrokeWidth { get; set; } = 2f;
+    public override void Draw(SKCanvas canvas, float dpi);
+    public override bool HitTestPoint(SKPoint p, float tol);
+    public override void Move(double dx, double dy) { Start.Set(Start.X+dx, Start.Y+dy); End.Set(End.X+dx, End.Y+dy); }
+}
+
+public interface ISnapService
+{
+    SKPoint Snap(SKPoint p);
+    Node SnapOrConnect(Node node, IEnumerable<Node> candidates, float tol);
+}
+```
+
+========================================
+CRITÉRIOS DE ACEITE
+========================================
+1) **Tela preta** com `SKElement` preenchendo a janela.
+2) **Criar linha segurando SHIFT** (click, arrasta, solta). Ao soltar SHIFT, posso selecionar/mover.
+3) **Handles** visíveis em `start`/`end`; arraste para **redimensionar**.
+4) **Conectar endpoints**: ao soltar perto de outro endpoint, as linhas passam a **compartilhar** o mesmo `Node`.
+5) Mover uma linha/handle conectado move **todas as linhas** conectadas ao mesmo `Node` **uniformemente**.
+6) **Snap** a endpoints e grid (8 px) com tolerância.
+7) **Selecionar e deletar** com `Delete`; sem `Node`s órfãos.
+8) Código em **MVVM**, SOLID, Observer, Singleton (EventBus), Clean Code, com **comentários úteis**.
+9) **Baixo XAML** (somente o necessário para hospedar o `SKElement`).
+
+========================================
+ARQUIVOS A GERAR/EDITAR (SUGESTÃO)
+========================================
+- `Views/SketchView.xaml` + `SketchView.xaml.cs`
+- `ViewModels/SketchViewModel.cs`
+- `Models/Geometry/Node.cs`
+- `Models/Geometry/BaseShape.cs`, `LineShape.cs`, `RectShape.cs`, `CircleShape.cs`
+- `Services/RenderService.cs`, `HitTestService.cs`, `SnapService.cs`, `ConnectionService.cs`, `SelectionService.cs`, `EventBus.cs (Singleton)`
+- `Commands/DeleteSelectionCommand.cs` (e outros se necessário)
+- `Utils/Math2D.cs`, `Guard.cs`
+- Atualizar csproj para incluir `SkiaSharp` e `SkiaSharp.Views.WPF` 2.88.x (sem tocar no `.gitignore`).
+
+========================================
+NOTAS FINAIS
+========================================
+- Priorize APIs estáveis (2.88.x). **Não** use APIs exclusivas de versões novas.
+- Comentários em português, concisos e objetivos.
+- Se possível, inclua um pequeno **README.md** com atalhos e instruções rápidas de build.
+- **Não** modifique `.gitignore`.

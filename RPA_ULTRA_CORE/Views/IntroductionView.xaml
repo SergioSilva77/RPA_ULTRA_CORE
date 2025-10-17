@@ -1,0 +1,289 @@
+<Window x:Class="RPA_ULTRA_CORE.Views.IntroductionView"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        xmlns:viewmodels="clr-namespace:RPA_ULTRA_CORE.ViewModels"
+        mc:Ignorable="d"
+        Title="RPA Ultra Core"
+        Height="700"
+        Width="1200"
+        WindowStartupLocation="CenterScreen"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ResizeMode="NoResize">
+
+   
+
+    <materialDesign:Card UniformCornerRadius="15" Margin="20">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Header -->
+            <materialDesign:ColorZone Grid.Row="0"
+                                      Mode="PrimaryDark"
+                                      Padding="16"
+                                      materialDesign:ElevationAssist.Elevation="Dp4"
+                                      CornerRadius="15 15 0 0">
+                <DockPanel>
+                    <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                        <!-- Removido Style; botão normal com ícone -->
+                        <Button ToolTip="Minimizar" Click="MinimizeWindow" Foreground="White"
+                                Padding="6" Margin="0,0,8,0" Background="{x:Null}" BorderBrush="{x:Null}">
+                            <materialDesign:PackIcon Kind="WindowMinimize"/>
+                        </Button>
+                        <Button ToolTip="Fechar" Click="CloseWindow" Foreground="White"
+                                Padding="6" Background="{x:Null}" BorderBrush="{x:Null}">
+                            <materialDesign:PackIcon Kind="Close"/>
+                        </Button>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Robot"
+                                                 Width="32" Height="32"
+                                                 VerticalAlignment="Center"
+                                                 Foreground="White"/>
+                        <TextBlock Text="RPA ULTRA CORE"
+                                   FontSize="20" FontWeight="Bold"
+                                   VerticalAlignment="Center"
+                                   Margin="12,0,0,0"
+                                   Foreground="White"/>
+                    </StackPanel>
+                </DockPanel>
+            </materialDesign:ColorZone>
+
+            <!-- Conteúdo Principal -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*"/>
+                    <ColumnDefinition Width="3*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Esquerda -->
+                <Grid Grid.Column="0" Background="{DynamicResource MaterialDesignPaper}">
+                    <StackPanel VerticalAlignment="Center" Margin="40">
+                        <materialDesign:PackIcon Kind="HomeAutomation"
+                                                 Width="120" Height="120"
+                                                 HorizontalAlignment="Center"
+                                                 Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+
+                        <TextBlock Text="Bem-vindo ao"
+                                   FontSize="28" FontWeight="Light"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,30,0,0"
+                                   Foreground="{DynamicResource MaterialDesignBody}"/>
+
+                        <TextBlock Text="RPA Ultra Core"
+                                   FontSize="36" FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,5,0,0"
+                                   Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+
+                        <TextBlock Text="Automação de Processos Robóticos"
+                                   FontSize="16" FontWeight="Light"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,10,0,0"
+                                   Foreground="{DynamicResource MaterialDesignBodyLight}"/>
+
+                        <Separator Margin="0,30,0,30"
+                                   Background="{DynamicResource MaterialDesignDivider}"/>
+
+                        <!-- Features: sem Spacing; use Margin em cada item -->
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <materialDesign:PackIcon Kind="CheckCircle"
+                                                         Foreground="{DynamicResource SecondaryHueMidBrush}"
+                                                         VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Text="Interface Moderna e Intuitiva"
+                                           VerticalAlignment="Center" FontSize="14"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <materialDesign:PackIcon Kind="CheckCircle"
+                                                         Foreground="{DynamicResource SecondaryHueMidBrush}"
+                                                         VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Text="Automação Poderosa e Flexível"
+                                           VerticalAlignment="Center" FontSize="14"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
+                                <materialDesign:PackIcon Kind="CheckCircle"
+                                                         Foreground="{DynamicResource SecondaryHueMidBrush}"
+                                                         VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Text="Arquitetura MVVM Escalável"
+                                           VerticalAlignment="Center" FontSize="14"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <materialDesign:PackIcon Kind="CheckCircle"
+                                                         Foreground="{DynamicResource SecondaryHueMidBrush}"
+                                                         VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Text="Material Design Components"
+                                           VerticalAlignment="Center" FontSize="14"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Direita -->
+                <Grid Grid.Column="1" Background="{DynamicResource MaterialDesignDarkBackground}">
+                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="400">
+
+                        <TextBlock Text="Começar Agora"
+                                   FontSize="32" FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,40"
+                                   Foreground="White"/>
+
+                        <!-- Cartão 1 -->
+                        <materialDesign:Card Margin="0,0,0,20" UniformCornerRadius="10" Padding="0">
+                            <Button Height="100" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding NewProjectCommand}" Background="{x:Null}" BorderBrush="{x:Null}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <materialDesign:PackIcon Grid.Column="0" Kind="FilePlus"
+                                                             Width="40" Height="40"
+                                                             VerticalAlignment="Center" Margin="20,0,20,0"
+                                                             Foreground="{DynamicResource PrimaryHueMidBrush}"/>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Novo Projeto" FontSize="18" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Criar um novo projeto de automação"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                   Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </materialDesign:Card>
+
+                        <!-- Cartão 2 -->
+                        <materialDesign:Card Margin="0,0,0,20" UniformCornerRadius="10" Padding="0">
+                            <Button Height="100" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding OpenProjectCommand}" Background="{x:Null}" BorderBrush="{x:Null}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <materialDesign:PackIcon Grid.Column="0" Kind="FolderOpen"
+                                                             Width="40" Height="40"
+                                                             VerticalAlignment="Center" Margin="20,0,20,0"
+                                                             Foreground="{DynamicResource SecondaryHueMidBrush}"/>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Abrir Projeto" FontSize="18" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Abrir um projeto existente"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                   Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </materialDesign:Card>
+
+                        <!-- Cartão 3 -->
+                        <materialDesign:Card Margin="0,0,0,20" UniformCornerRadius="10" Padding="0">
+                            <Button Height="100" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding SettingsCommand}" Background="{x:Null}" BorderBrush="{x:Null}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <materialDesign:PackIcon Grid.Column="0" Kind="Cog"
+                                                             Width="40" Height="40"
+                                                             VerticalAlignment="Center" Margin="20,0,20,0"
+                                                             Foreground="{DynamicResource MaterialDesignBody}"/>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Configurações" FontSize="18" FontWeight="SemiBold"/>
+                                        <TextBlock Text="Personalizar suas preferências"
+                                                   FontSize="12"
+                                                   Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                                   Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </materialDesign:Card>
+
+                        <!-- Cartão 4 - Dashboard com SkiaSharp -->
+                        <materialDesign:Card Margin="0,0,0,20" UniformCornerRadius="10" Padding="0" Background="#FF6F00">
+                            <Button Height="100" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding OpenDashboardCommand}" Background="{x:Null}" BorderBrush="{x:Null}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <materialDesign:PackIcon Grid.Column="0" Kind="ChartBox"
+                                                             Width="40" Height="40"
+                                                             VerticalAlignment="Center" Margin="20,0,20,0"
+                                                             Foreground="White"/>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Dashboard SkiaSharp" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        <TextBlock Text="Visualizações animadas e gráficos"
+                                                   FontSize="12"
+                                                   Foreground="White"
+                                                   Opacity="0.9"
+                                                   Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </materialDesign:Card>
+
+                        <!-- Cartão 5 - Editor Vetorial -->
+                        <materialDesign:Card UniformCornerRadius="10" Padding="0" Background="#00C853">
+                            <Button Height="100" HorizontalContentAlignment="Stretch"
+                                    Command="{Binding OpenSketchEditorCommand}" Background="{x:Null}" BorderBrush="{x:Null}">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+
+                                    <materialDesign:PackIcon Grid.Column="0" Kind="VectorBezier"
+                                                             Width="40" Height="40"
+                                                             VerticalAlignment="Center" Margin="20,0,20,0"
+                                                             Foreground="White"/>
+
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                        <TextBlock Text="Editor Vetorial" FontSize="18" FontWeight="SemiBold" Foreground="White"/>
+                                        <TextBlock Text="Desenho vetorial com SkiaSharp"
+                                                   FontSize="12"
+                                                   Foreground="White"
+                                                   Opacity="0.9"
+                                                   Margin="0,5,0,0"/>
+                                    </StackPanel>
+                                </Grid>
+                            </Button>
+                        </materialDesign:Card>
+
+                        <StackPanel Margin="0,40,0,0" HorizontalAlignment="Center">
+                            <TextBlock Text="Versão 1.0.0" FontSize="12"
+                                       Foreground="{DynamicResource MaterialDesignBodyLight}" HorizontalAlignment="Center"/>
+                            <TextBlock Text="© 2024 RPA Ultra Core. Todos os direitos reservados."
+                                       FontSize="10"
+                                       Foreground="{DynamicResource MaterialDesignBodyLight}"
+                                       HorizontalAlignment="Center" Margin="0,5,0,0"/>
+                        </StackPanel>
+
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </materialDesign:Card>
+</Window>
