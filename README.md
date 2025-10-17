@@ -312,7 +312,7 @@ Se receber erro sobre `ConventionBuilder`:
 
 ## 📝 Licença
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE.txt) para mais detalhes.
+Este projeto está com licença.
 
 ## 🤝 Contribuindo
 
