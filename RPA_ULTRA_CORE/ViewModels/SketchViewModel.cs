@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Linq;
 using System.Windows.Input;
 using SkiaSharp;
 using RPA_ULTRA_CORE.Models.Geometry;
@@ -8,6 +9,7 @@ using RPA_ULTRA_CORE.Helpers;
 using RPA_ULTRA_CORE.Inventory.UI;
 using RPA_ULTRA_CORE.Inventory.Services;
 using RPA_ULTRA_CORE.Plugins.Abstractions;
+using RPA_ULTRA_CORE.Views;
 
 namespace RPA_ULTRA_CORE.ViewModels
 {
@@ -861,20 +863,33 @@ namespace RPA_ULTRA_CORE.ViewModels
         /// </summary>
         private void CreateShapeFromBlueprint(IInventoryItem item, SKPoint position)
         {
-            // Por enquanto, cria uma forma básica
-            // Futuramente usar IShapeFactory
+            BaseShape? shape = null;
 
-            if (item.Id.Contains("rect"))
+            // Se o item é um VariableInventoryItem ou tem CreateShape
+            if (item is Inventory.Items.VariableInventoryItem varItem)
             {
-                var rect = new RectShape(position.X - 50, position.Y - 25, 100, 50);
-                Shapes.Add(rect);
+                shape = varItem.CreateShape(position);
+            }
+            // Formas padrão
+            else if (item.Id.Contains("rect"))
+            {
+                shape = new RectShape(position.X - 50, position.Y - 25, 100, 50);
             }
             else if (item.Id.Contains("circle"))
             {
-                var circle = new CircleShape(position.X, position.Y, 30);
-                Shapes.Add(circle);
+                shape = new CircleShape(position.X, position.Y, 30);
             }
-            // Linha já é criada com SHIFT
+
+            if (shape != null)
+            {
+                // Se for VariableShape, define a referência ao ViewModel
+                if (shape is VariableShape varShape)
+                {
+                    varShape.ViewModel = this;
+                }
+
+                Shapes.Add(shape);
+            }
         }
 
         /// <summary>
@@ -912,5 +927,143 @@ namespace RPA_ULTRA_CORE.ViewModels
             CurrentToolState = ToolState.Idle;
             RequestRedraw();
         }
+
+        #region Variable Support Methods
+
+        /// <summary>
+        /// Manipula duplo clique no canvas
+        /// </summary>
+        public void OnMouseDoubleClick(SKPoint point)
+        {
+            // Tenta manipular duplo clique em variável
+            HandleVariableDoubleClick(point);
+        }
+
+        /// <summary>
+        /// Manipula o duplo clique em variáveis para abrir o editor
+        /// </summary>
+        private void HandleVariableDoubleClick(SKPoint point)
+        {
+            // Encontra a variável clicada
+            var clickedVariable = Shapes
+                .OfType<VariableShape>()
+                .FirstOrDefault(v => v.HitTestPoint(point));
+
+            if (clickedVariable != null)
+            {
+                OpenVariableEditor(clickedVariable);
+            }
+        }
+
+        /// <summary>
+        /// Abre o editor de variáveis
+        /// </summary>
+        public void OpenVariableEditor(VariableShape variableShape)
+        {
+            var dialog = new VariableEditorDialog(variableShape)
+            {
+                Owner = System.Windows.Application.Current.MainWindow
+            };
+
+            if (dialog.ShowDialog() == true)
+            {
+                // A variável já foi atualizada e propagada no diálogo
+                // Força o redesenho
+                RequestRedraw();
+            }
+        }
+
+        /// <summary>
+        /// Encontra uma shape pelo nó
+        /// </summary>
+        public BaseShape? FindShapeByNode(Node node)
+        {
+            if (node == null) return null;
+
+            // Procura em todas as shapes
+            foreach (var shape in Shapes)
+            {
+                if (shape is VariableShape varShape)
+                {
+                    if (varShape.CenterNode == node)
+                        return varShape;
+                }
+                else if (shape is RectShape rectShape)
+                {
+                    var nodes = rectShape.GetNodes();
+                    if (nodes.Contains(node))
+                        return rectShape;
+                }
+                else if (shape is LineShape lineShape)
+                {
+                    if (lineShape.Start == node || lineShape.End == node)
+                        return lineShape;
+                }
+                else if (shape is CircleShape circleShape)
+                {
+                    // CircleShape não tem CenterNode no sistema atual
+                    var nodes = circleShape.GetNodes();
+                    if (nodes.Contains(node))
+                        return circleShape;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Propaga todas as variáveis do canvas
+        /// </summary>
+        public void PropagateAllVariables()
+        {
+            // Limpa todas as variáveis recebidas
+            foreach (var varShape in Shapes.OfType<VariableShape>())
+            {
+                varShape.IncomingVariables.Clear();
+            }
+
+            // Propaga cada variável
+            foreach (var varShape in Shapes.OfType<VariableShape>())
+            {
+                varShape.PropagateVariable();
+            }
+
+            RequestRedraw();
+        }
+
+        /// <summary>
+        /// Retorna informações de debug sobre variáveis
+        /// </summary>
+        public string GetVariablesDebugInfo()
+        {
+            var variables = Shapes.OfType<VariableShape>().ToList();
+            if (!variables.Any())
+                return "No variables in canvas";
+
+            var info = $"Total Variables: {variables.Count}\n\n";
+
+            foreach (var varShape in variables)
+            {
+                info += $"Variable: {varShape.VariableName}\n";
+                info += $"  Value: {varShape.VariableValue}\n";
+                info += $"  Position: ({varShape.Position.X:F0}, {varShape.Position.Y:F0})\n";
+                info += $"  Connections: 0\n"; // TODO: implementar contagem de conexões
+
+                if (varShape.IncomingVariables.Any())
+                {
+                    info += "  Incoming Variables:\n";
+                    foreach (var kvp in varShape.IncomingVariables)
+                    {
+                        info += $"    {kvp.Key} = {kvp.Value}\n";
+                    }
+                }
+
+                info += "\n";
+            }
+
+            return info;
+        }
+
+        #endregion
     }
 }

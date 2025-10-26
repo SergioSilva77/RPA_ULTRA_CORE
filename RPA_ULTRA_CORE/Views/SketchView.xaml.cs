@@ -34,6 +34,9 @@ namespace RPA_ULTRA_CORE.Views
 
             // Foco inicial no canvas
             skiaCanvas.Focus();
+
+            // Adiciona o evento de duplo clique
+            skiaCanvas.MouseLeftButtonDown += OnSkiaCanvasMouseLeftButtonDown;
         }
 
         /// <summary>
@@ -94,6 +97,25 @@ namespace RPA_ULTRA_CORE.Views
             // Libera captura do mouse
             skiaCanvas.ReleaseMouseCapture();
             skiaCanvas.InvalidateVisual();
+        }
+
+        /// <summary>
+        /// Detecta duplo clique no canvas
+        /// </summary>
+        private void OnSkiaCanvasMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // Verifica se é duplo clique
+            if (e.ClickCount == 2)
+            {
+                var point = e.GetPosition(skiaCanvas);
+                var skPoint = ConvertToSKPoint(point);
+
+                _viewModel.OnMouseDoubleClick(skPoint);
+                skiaCanvas.InvalidateVisual();
+
+                // Marca o evento como manipulado para evitar processamento duplo
+                e.Handled = true;
+            }
         }
 
         /// <summary>
