@@ -1,4 +1,4 @@
->> NÃO MODIFIQUE O .gitignore. **Apenas** adicione/edite arquivos do app conforme abaixo.
+            >> NÃO MODIFIQUE O .gitignore. **Apenas** adicione/edite arquivos do app conforme abaixo.
 
 Crie em WPF (.NET 8, `net8.0-windows`) uma **tela preta** para desenho vetorial usando **SkiaSharp** (render em `SKElement` via `SkiaSharp.Views.WPF`). Trabalhe **majoritariamente em C# (POO) e pouco XAML**, mantendo **MVVM**, SOLID (SRP, OCP, LSP, ISP, DIP), **Observer**, **Singleton**, **Clean Code** e **comentários relevantes**.
 Evite APIs recentes demais: use apenas SkiaSharp 2.88.x (ex.: `SkiaSharp` e `SkiaSharp.Views.WPF` 2.88.x) e tipos clássicos (`SKCanvas`, `SKPaint`, `SKPoint`, `SKRect`, `SKPath`, `SKMatrix`).
