@@ -5,7 +5,8 @@
       "Bash(dotnet restore:*)",
       "Bash(dotnet build:*)",
       "Bash(dir:*)",
-      "Bash(start RPA_ULTRA_CORE.exe)"
+      "Bash(start RPA_ULTRA_CORE.exe)",
+      "Bash(taskkill:*)"
     ],
     "deny": [],
     "ask": []

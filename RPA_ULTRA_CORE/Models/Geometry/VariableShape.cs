@@ -7,8 +7,9 @@ namespace RPA_ULTRA_CORE.Models.Geometry
 {
     /// <summary>
     /// Representa um nó de variável que pode armazenar dados e propagar pelos galhos
+    /// AGORA COM SUPORTE A SNAP COMPLETO
     /// </summary>
-    public class VariableShape : BaseShape
+    public class VariableShape : BaseShape, IAnchorProvider
     {
         private string _variableName = "Variable";
         private string _variableValue = "";
@@ -38,6 +39,9 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         // Referência ao ViewModel para buscar shapes
         public ViewModels.SketchViewModel? ViewModel { get; set; }
 
+        // Evento para IAnchorProvider
+        public event EventHandler? Transformed;
+
         public VariableShape(SKPoint position) : base()
         {
             _position = position;
@@ -55,6 +59,7 @@ namespace RPA_ULTRA_CORE.Models.Geometry
             if (sender is Node node)
             {
                 _position = new SKPoint((float)node.X, (float)node.Y);
+                Transformed?.Invoke(this, EventArgs.Empty);
             }
         }
 
@@ -156,6 +161,7 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         {
             _position = new SKPoint(_position.X + (float)deltaX, _position.Y + (float)deltaY);
             _centerNode.Set(_centerNode.X + deltaX, _centerNode.Y + deltaY);
+            Transformed?.Invoke(this, EventArgs.Empty);
         }
 
         public override SKRect GetBounds()
@@ -172,6 +178,104 @@ namespace RPA_ULTRA_CORE.Models.Geometry
         {
             return new List<Node> { _centerNode };
         }
+
+        #region IAnchorProvider Implementation - SISTEMA DE SNAP
+
+        /// <summary>
+        /// Retorna a âncora mais próxima para snap
+        /// </summary>
+        public ShapeAnchor? GetNearestAnchor(SKPoint world, float tolerancePx)
+        {
+            var distanceToCenter = SKPoint.Distance(world, _position);
+
+            // Se estiver muito próximo ao centro (30% do raio), retorna âncora do centro
+            if (distanceToCenter <= RADIUS * 0.3f)
+            {
+                return new ShapeAnchor
+                {
+                    ShapeId = Id.ToString(),
+                    Kind = AnchorKind.Center,
+                    World = _position,
+                    T = 0,
+                    Angle = 0,
+                    EdgeIndex = 0
+                };
+            }
+
+            // Se estiver dentro da tolerância do perímetro, retorna ponto no perímetro
+            var distanceFromEdge = Math.Abs(distanceToCenter - RADIUS);
+            if (distanceFromEdge <= tolerancePx)
+            {
+                // Calcula o ponto no perímetro mais próximo
+                var direction = world - _position;
+                var length = direction.Length;
+
+                if (length > 0.1f)
+                {
+                    var normalized = new SKPoint(direction.X / length, direction.Y / length);
+                    var perimeterPoint = new SKPoint(
+                        _position.X + normalized.X * RADIUS,
+                        _position.Y + normalized.Y * RADIUS
+                    );
+
+                    // Calcula o ângulo para o ponto
+                    var angle = (float)(Math.Atan2(normalized.Y, normalized.X) * 180 / Math.PI);
+                    if (angle < 0) angle += 360;
+
+                    return new ShapeAnchor
+                    {
+                        ShapeId = Id.ToString(),
+                        Kind = AnchorKind.Perimeter,
+                        World = perimeterPoint,
+                        T = angle / 360f, // Normalizado 0-1
+                        Angle = angle,
+                        EdgeIndex = 0
+                    };
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Enumera todos os pontos de âncora estáticos
+        /// </summary>
+        public IEnumerable<ShapeAnchor> EnumerateAnchors()
+        {
+            // Âncora do centro
+            yield return new ShapeAnchor
+            {
+                ShapeId = Id.ToString(),
+                Kind = AnchorKind.Center,
+                World = _position,
+                T = 0,
+                Angle = 0,
+                EdgeIndex = 0
+            };
+
+            // 8 âncoras ao redor do perímetro (a cada 45 graus)
+            for (int i = 0; i < 8; i++)
+            {
+                var angle = i * 45f;
+                var radians = angle * Math.PI / 180.0;
+                var perimeterPoint = new SKPoint(
+                    _position.X + RADIUS * (float)Math.Cos(radians),
+                    _position.Y + RADIUS * (float)Math.Sin(radians)
+                );
+
+                yield return new ShapeAnchor
+                {
+                    ShapeId = Id.ToString(),
+                    Kind = AnchorKind.Perimeter,
+                    World = perimeterPoint,
+                    T = angle / 360f,
+                    Angle = angle,
+                    EdgeIndex = i
+                };
+            }
+        }
+
+        #endregion
 
         /// <summary>
         /// Propaga a variável para os nós conectados
